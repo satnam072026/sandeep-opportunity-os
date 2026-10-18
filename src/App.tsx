@@ -167,11 +167,6 @@ const MainContent: React.FC = () => {
         fId = "f_global_jobs";
         sId = "satnam_global_jobs";
         tId = "All Roles";
-      } else if (agent.id === "haya_arsh") {
-        wsId = "ws_haya_arsh";
-        fId = undefined;
-        sId = undefined;
-        tId = undefined;
       }
 
       const next: ExplorerSelection = {

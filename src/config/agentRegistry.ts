@@ -1,11 +1,10 @@
 /**
  * Sandeep Opportunity OS — Canonical AI Agent Registry
  *
- * Central definition of the 4 AI Research Agents operating for Sandeep:
+ * Central definition of the 3 configured AI Research Agents operating for Sandeep:
  * 1. Bago Muse — Lead Career Operations Scout & Social Freelance Hunter
  * 2. Haya Satnam — Global Employment & Regional Market Expansion Hunter (Muse_Satnam)
  * 3. Kattu AI — Regional Job Intelligence & Daily QA Verification Engine (Projects KattuAI)
- * 4. Haya Arsh — Academic & Funded Scholarship Scout (Placeholder awaiting configuration)
  *
  * Extensible Architecture:
  * Additional agents and sources can be registered here without modifying application components.
@@ -137,35 +136,6 @@ export const AGENT_REGISTRY: AgentConfig[] = [
       "Timezone overlap verification for Cyprus (UTC+2/UTC+3)",
       "Daily data QA, link verification, and duplicate prevention"
     ]
-  },
-  {
-    id: "haya_arsh",
-    name: "Haya Arsh",
-    slug: "haya-arsh",
-    codename: "HAYA-ARSH",
-    role: "Workspace not configured yet",
-    status: "setup_required",
-    workspaceType: "Workspace Placeholder",
-    driveRootId: null,
-    driveRootName: null,
-    ownerAccountLabel: "Unconfigured",
-    sourceType: "Pending Setup",
-    avatarIcon: "folder",
-    themeColor: "#8b5cf6", // Purple / Violet
-    accentBg: "rgba(139, 92, 246, 0.12)",
-    assignedPipelines: [],
-    connectedSources: [],
-    updateSchedule: "Pending Setup",
-    lastAgentUpdate: "Never",
-    lastCmsIngestion: "Never",
-    health: "Setup Required",
-    recordsDiscovered: 0,
-    recordsAccepted: 0,
-    duplicateCount: 0,
-    gatedCount: 0,
-    errorMessage: "Workspace not configured yet. No data sources connected.",
-    description: "Workspace not configured yet",
-    capabilities: []
   }
 ];
 

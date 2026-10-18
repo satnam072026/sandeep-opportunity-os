@@ -46,7 +46,7 @@ const ROUTE_TITLES: Record<AppRoutePath, { title: string; context: string }> = {
   "/sources": { title: "Data Sources & Ingestion Hub", context: "Google Sheets, Drive XLSX, Fallback Repositories & Ingestion Telemetry" },
   "/freelance": { title: "Freelance Client Leads", context: "Bago Muse · Cyprus & UK SME Targets with Actionable Commercial Hooks" },
   "/jobs": { title: "Visa & Cyprus Jobs", context: "Haya Satnam · Nicosia, Limassol & EU Visa-Sponsoring Strategic Roles" },
-  "/masters": { title: "Master's & Scholarships", context: "Haya Arsh · UCLan Cyprus 40% Alumni, MSc Computing & Erasmus Mundus" },
+  "/masters": { title: "Master's & Scholarships", context: "Bago Muse · UCLan Cyprus 40% Alumni, MSc Computing & Erasmus Mundus" },
   "/remote": { title: "Remote & Internships", context: "Kattu AI · Distributed EU/EMEA Roles Excluding US/Africa Lockouts" },
   "/crm": { title: "Saved & CRM Follow-ups", context: "Sandeep's Protected CRM Workspace · Statuses, Notes & Follow-up Dates" },
   "/saved": { title: "Saved & CRM Follow-ups", context: "Sandeep's Protected CRM Workspace · Statuses, Notes & Follow-up Dates" },
@@ -374,11 +374,11 @@ export const AppShell: React.FC<AppShellProps> = ({
               )}
             </div>
 
-            {/* Status indicator: Last synced 2 hours ago | 4 agents active | 2,892 opportunities */}
+            {/* Status indicator: last sync, configured agents, and opportunity count */}
             <div className="os-status-indicator" title="System Status & Ingestion Health">
               <span className="os-status-pulse" aria-hidden="true" />
               <span className="os-status-text">
-                Synced {formatLastSync(lastSyncedAt)} <span className="os-status-sep">|</span> 4 agents active{" "}
+                Synced {formatLastSync(lastSyncedAt)} <span className="os-status-sep">|</span> 3 agents active{" "}
                 <span className="os-status-sep">|</span> {opportunities.length.toLocaleString()} opps
               </span>
             </div>

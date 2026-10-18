@@ -173,10 +173,12 @@ export const OperationsPage: React.FC<OperationsPageProps> = ({
     },
     {
       step: "6. Canonical Store (Neon PostgreSQL)",
-      status: mode === "NEON_LIVE" ? "LIVE (NEON)" : mode === "SUPABASE_LIVE" ? "LIVE (SUPABASE)" : "ADAPTER",
-      tone: mode === "NEON_LIVE" || mode === "SUPABASE_LIVE" ? "success" : "info",
+      status: mode === "CLOUDFLARE_D1_LIVE" ? "LIVE (D1)" : mode === "NEON_LIVE" ? "LIVE (NEON)" : mode === "SUPABASE_LIVE" ? "LIVE (SUPABASE)" : "ADAPTER",
+      tone: mode === "CLOUDFLARE_D1_LIVE" || mode === "NEON_LIVE" || mode === "SUPABASE_LIVE" ? "success" : "info",
       detail:
-        mode === "NEON_LIVE"
+        mode === "CLOUDFLARE_D1_LIVE"
+          ? "Cloudflare Worker API loaded canonical records from D1 during this session."
+          : mode === "NEON_LIVE"
           ? "The CMS loaded canonical records directly from Neon PostgreSQL (Lakebase) with strict 7-field CRM preservation."
           : mode === "SUPABASE_LIVE"
             ? "The dashboard loaded records from the configured Supabase project during this session."
@@ -201,7 +203,7 @@ export const OperationsPage: React.FC<OperationsPageProps> = ({
       <PageHeader
         eyebrow="ENTERPRISE INTELLIGENCE PIPELINE · NEON POSTGRESQL · 4 AI FLEET AGENTS"
         title="Operations & Ingestion Control Center"
-        subtitle="End-to-End Pipeline: Four AI Agents (Bago Muse, Haya Satnam, Kattu AI, Haya Arsh) → Google Drive & Sheets → 5-Hour Server Ingestion → Neon PostgreSQL → Opportunity OS"
+        subtitle="End-to-End Pipeline: Three configured AI agents (Bago Muse, Haya Satnam, Kattu AI) → Google Drive & Sheets → scheduled ingestion → Opportunity OS"
         actions={
           <button
             type="button"
@@ -218,9 +220,9 @@ export const OperationsPage: React.FC<OperationsPageProps> = ({
         items={[
           {
             label: "Canonical Database",
-            value: mode === "NEON_LIVE" ? "NEON POSTGRES" : mode === "SUPABASE_LIVE" ? "SUPABASE" : "SNAPSHOT",
-            delta: mode === "NEON_LIVE" ? "Lakebase (AWS Frankfurt)" : mode === "SUPABASE_LIVE" ? "Live configured project" : `${recordCount} verified seed records`,
-            tone: mode === "NEON_LIVE" || mode === "SUPABASE_LIVE" ? "success" : "info"
+            value: mode === "CLOUDFLARE_D1_LIVE" ? "CLOUDFLARE D1" : mode === "NEON_LIVE" ? "NEON POSTGRES" : mode === "SUPABASE_LIVE" ? "SUPABASE" : "SNAPSHOT",
+            delta: mode === "CLOUDFLARE_D1_LIVE" ? "Live Worker API" : mode === "NEON_LIVE" ? "Lakebase (AWS Frankfurt)" : mode === "SUPABASE_LIVE" ? "Live configured project" : `${recordCount} verified seed records`,
+            tone: mode === "CLOUDFLARE_D1_LIVE" || mode === "NEON_LIVE" || mode === "SUPABASE_LIVE" ? "success" : "info"
           },
           {
             label: "Canonical Records",
@@ -252,8 +254,8 @@ export const OperationsPage: React.FC<OperationsPageProps> = ({
           <div className="os-telemetry-card">
             <span className="os-tabs-label">Database Connection</span>
             <span className="os-telemetry-val">
-              <span className={`os-badge ${(dbHealth?.connected || mode === "NEON_LIVE" || mode === "SUPABASE_LIVE" || recordCount > 0) ? "success" : "warning"} mono`}>
-                {dbHealth?.connected ? "CONNECTED · LIVE" : (mode === "NEON_LIVE" || mode === "SUPABASE_LIVE" || recordCount > 0) ? "CONNECTED · LIVE" : "CONNECTING..."}
+              <span className={`os-badge ${(dbHealth?.connected || mode === "CLOUDFLARE_D1_LIVE" || mode === "NEON_LIVE" || mode === "SUPABASE_LIVE" || recordCount > 0) ? "success" : "warning"} mono`}>
+                {dbHealth?.connected ? "CONNECTED · LIVE" : (mode === "CLOUDFLARE_D1_LIVE" || mode === "NEON_LIVE" || mode === "SUPABASE_LIVE" || recordCount > 0) ? "CONNECTED · LIVE" : "CONNECTING..."}
               </span>
             </span>
             <span className="os-source-notes">

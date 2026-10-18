@@ -173,7 +173,7 @@ export const BreadcrumbBar: React.FC<BreadcrumbBarProps> = ({
         <div className="os-status-indicator" title="System Status & Active Opportunities">
           <span className="os-status-pulse" aria-hidden="true" />
           <span className="os-status-text">
-            Synced {formatLastSync(lastSyncedAt)} <span className="os-status-sep">|</span> 4 agents active{" "}
+            Synced {formatLastSync(lastSyncedAt)} <span className="os-status-sep">|</span> 3 agents active{" "}
             <span className="os-status-sep">|</span> {opportunities.length.toLocaleString()} opps
           </span>
         </div>

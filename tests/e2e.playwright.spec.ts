@@ -126,13 +126,13 @@ test.describe("Sandeep Opportunity OS — enterprise frontend flows", () => {
     await expect(page.locator("h3:has-text('7. AI Agent Fleet Provenance & Sources')")).toBeVisible();
   });
 
-  test("AI Agents page renders 4 autonomous fleet cards with provenance badges", async ({ page }) => {
+  test("AI Agents page renders the 3 configured fleet cards with provenance badges", async ({ page }) => {
     await page.goto("/agents");
     await expect(page.locator(".os-page-title")).toHaveText("AI Research Agent Fleet");
     await expect(page.locator("h3:has-text('Bago Muse')")).toBeVisible();
     await expect(page.locator("h3:has-text('Haya Satnam')")).toBeVisible();
     await expect(page.locator("h3:has-text('Kattu AI')")).toBeVisible();
-    await expect(page.locator("h3:has-text('Haya Arsh')")).toBeVisible();
+    await expect(page.locator("h3:has-text('Haya Arsh')")).toHaveCount(0);
   });
 
   test("Data Sources page renders Google Drive/Sheets and local sources registry", async ({ page }) => {
@@ -204,7 +204,7 @@ test.describe("Sandeep Opportunity OS — enterprise frontend flows", () => {
     await expect(page.locator("h1:has-text('Enterprise Control Center')")).toHaveCount(0);
   });
 
-  test("Workspace Agents: displays exactly Bago Muse, Kattu AI, Haya Satnam, Haya Arsh and excludes Sandy Muse", async ({ page }) => {
+  test("Workspace Agents: displays Bago Muse, Kattu AI, and Haya Satnam while excluding placeholders", async ({ page }) => {
     await page.goto("/today");
     if ((page.viewportSize()?.width || 0) <= 768) {
       await page.getByRole("button", { name: "Toggle navigation drawer" }).click();
@@ -213,17 +213,17 @@ test.describe("Sandeep Opportunity OS — enterprise frontend flows", () => {
     const agentSwitcher = page.locator(".os-agent-switcher-container");
     await expect(agentSwitcher).toBeVisible();
 
-    // Verify exactly 4 agents
+    // Verify exactly 3 configured agents
     await expect(agentSwitcher.locator(".os-agent-name:has-text('Bago Muse')")).toBeVisible();
     await expect(agentSwitcher.locator(".os-agent-name:has-text('Kattu AI')")).toBeVisible();
     await expect(agentSwitcher.locator(".os-agent-name:has-text('Haya Satnam')")).toBeVisible();
-    await expect(agentSwitcher.locator(".os-agent-name:has-text('Haya Arsh')")).toBeVisible();
+    await expect(agentSwitcher.locator(".os-agent-name:has-text('Haya Arsh')")).toHaveCount(0);
 
     // Strict rule: NEVER show Sandy Muse in the agent switcher
     await expect(agentSwitcher.locator(".os-agent-name:has-text('Sandy Muse')")).toHaveCount(0);
   });
 
-  test("Drive Explorer: renders all 6 root workspaces and enables one-click file navigation", async ({ page }) => {
+  test("Drive Explorer: omits the unconfigured workspace and enables one-click file navigation", async ({ page }) => {
     await page.goto("/today");
     if ((page.viewportSize()?.width || 0) <= 768) {
       await page.getByRole("button", { name: "Toggle navigation drawer" }).click();
@@ -232,11 +232,11 @@ test.describe("Sandeep Opportunity OS — enterprise frontend flows", () => {
     const explorer = page.locator(".os-drive-explorer");
     await expect(explorer).toBeVisible();
 
-    // Verify 6 root workspaces in the tree
+    // Verify configured root workspaces in the tree
     await expect(explorer.locator(".ws-label:has-text('Bago Muse')")).toBeVisible();
     await expect(explorer.locator(".ws-label:has-text('MUSESATNAM')")).toBeVisible();
     await expect(explorer.locator(".ws-label:has-text('Projects KattuAI')")).toBeVisible();
-    await expect(explorer.locator(".ws-label:has-text('Haya Arsh workspace')")).toBeVisible();
+    await expect(explorer.locator(".ws-label:has-text('Haya Arsh workspace')")).toHaveCount(0);
     await expect(explorer.locator(".ws-label:has-text('Job Apply')")).toBeVisible();
     await expect(explorer.locator(".ws-label:has-text('JOB_CMS_AGENTS')")).toBeVisible();
 

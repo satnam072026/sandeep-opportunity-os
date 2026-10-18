@@ -90,7 +90,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       <div className="os-sidebar-scroll">
-        {/* 2. WORKSPACE AGENTS: Bago Muse, Kattu AI, Haya Satnam, Haya Arsh */}
+        {/* 2. WORKSPACE AGENTS: Bago Muse, Kattu AI, Haya Satnam */}
         <AgentSwitcher
           selectedAgentId={selection.agentId}
           onSelectAgent={(agent) => {

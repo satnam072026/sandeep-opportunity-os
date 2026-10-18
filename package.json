@@ -10,10 +10,15 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "node --test tests/*.test.mjs",
+    "test": "node --test tests/opportunity_os.test.mjs",
+    "test:integration:neon": "node --test tests/neon_integration.test.mjs",
     "test:e2e": "playwright test",
     "sync:data": "node scripts/sync-data.mjs",
-    "seed:supabase": "node scripts/seed-supabase.mjs"
+    "seed:supabase": "node scripts/seed-supabase.mjs",
+    "seed:generate": "node scripts/generate-d1-seed.mjs",
+    "db:local:setup": "npm run seed:generate && wrangler d1 migrations apply sandeep-opportunity-os --local && wrangler d1 execute sandeep-opportunity-os --local --file cloudflare/seed.sql",
+    "db:remote:setup": "npm run seed:generate && wrangler d1 migrations apply sandeep-opportunity-os --remote && wrangler d1 execute sandeep-opportunity-os --remote --file cloudflare/seed.sql",
+    "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
     "@neon/config": "^1.9.2",
@@ -36,6 +41,7 @@
     "globals": "^15.15.0",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.25.0",
-    "vite": "^6.2.0"
+    "vite": "^6.2.0",
+    "wrangler": "^4.151.1"
   }
 }

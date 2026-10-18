@@ -58,7 +58,7 @@ export const AiAgentsPage: React.FC<AiAgentsPageProps> = ({
           <div className="os-page-tagline">AUTONOMOUS MULTI-AGENT INTELLIGENCE</div>
           <h1 className="os-page-title">AI Research Agent Fleet</h1>
           <p className="os-page-subtitle">
-            Five autonomous agents independently scout employment, contracts, and scholarship targets on 6–8 hour
+            Three configured agents independently scout employment, contracts, and scholarship targets on 6–8 hour
             schedules. Opportunity OS acts as the central control room—ingesting, scoring, and deduplicating their findings.
           </p>
         </div>

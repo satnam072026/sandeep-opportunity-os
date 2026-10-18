@@ -33,7 +33,7 @@ export function isProductionOpportunity(opp: OpportunityRecord): boolean {
   return !id.startsWith("opp_test") && !id.startsWith("test-") && !id.includes("opp-test");
 }
 
-export type DataSourceMode = "NEON_LIVE" | "SUPABASE_LIVE" | "SEED_IMPORT_ADAPTER";
+export type DataSourceMode = "CLOUDFLARE_D1_LIVE" | "NEON_LIVE" | "SUPABASE_LIVE" | "SEED_IMPORT_ADAPTER";
 
 export interface RepositoryState {
   mode: DataSourceMode;
@@ -43,6 +43,31 @@ export interface RepositoryState {
   uploadedXlsxId: string;
   lastSyncedAt: string;
   syncTelemetry?: SyncTelemetry | null;
+}
+
+async function cloudflareRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(path, {
+    ...init,
+    credentials: "include",
+    headers: { "Content-Type": "application/json", ...(init?.headers || {}) }
+  });
+  if (!response.ok) throw new Error(`Cloudflare API request failed (${response.status})`);
+  return response.json() as Promise<T>;
+}
+
+async function authenticateCloudflareWrite(): Promise<boolean> {
+  const password = window.prompt("Enter the CRM administrator password to save this change:");
+  if (!password) return false;
+  try {
+    await cloudflareRequest("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ password })
+    });
+    return true;
+  } catch {
+    window.alert("The administrator password was not accepted.");
+    return false;
+  }
 }
 
 function loadPersistedCrmMap(): Record<string, Partial<OpportunityRecord>> {
@@ -262,7 +287,27 @@ export async function fetchOpportunityState(): Promise<RepositoryState> {
   const seedProfile = verifiedSeed.candidate_profile as unknown as CandidateProfile;
   const profile = loadPersistedProfile(seedProfile);
 
-  // 1. Primary: Fetch from Neon PostgreSQL via backend API
+  // Primary production source: same-origin Cloudflare Worker backed by D1.
+  try {
+    const live = await cloudflareRequest<{ opportunities: OpportunityRecord[]; profile?: CandidateProfile }>("/api/state");
+    if (Array.isArray(live.opportunities) && live.opportunities.length > 0) {
+      const opportunities = live.opportunities.filter(isProductionOpportunity);
+      void saveCachedOpportunities(opportunities);
+      return {
+        mode: "CLOUDFLARE_D1_LIVE",
+        opportunities,
+        profile: live.profile ? { ...profile, ...live.profile } : profile,
+        nativeSheetId: NATIVE_SHEET_ID,
+        uploadedXlsxId: UPLOADED_XLSX_ID,
+        lastSyncedAt: getLatestVerificationTimestamp(opportunities),
+        syncTelemetry: loadLatestSyncTelemetry()
+      };
+    }
+  } catch {
+    // Local preview and legacy deployments continue through the existing fallbacks.
+  }
+
+  // Legacy fallback: fetch from Neon PostgreSQL via backend API.
   try {
     const res = await fetch("/api/opportunities");
     if (res.ok) {
@@ -296,6 +341,9 @@ export async function fetchOpportunityState(): Promise<RepositoryState> {
           }
         }
         const finalOpps = uniqueNeonOpps.filter(isProductionOpportunity);
+        if (finalOpps.length === 0) {
+          throw new Error("Neon returned no production opportunities");
+        }
         void saveCachedOpportunities(finalOpps);
 
         let telemetry = data.telemetry as SyncTelemetry | null;
@@ -543,12 +591,23 @@ export async function performOpportunitySync(
   return { state, telemetry };
 }
 
-export function persistCandidateProfile(profile: CandidateProfile): CandidateProfile {
+export async function persistCandidateProfile(profile: CandidateProfile): Promise<CandidateProfile> {
   if (typeof window !== "undefined" && window.localStorage) {
     try {
       window.localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
     } catch {
       // Storage quota or private mode. Keep the in-memory profile unchanged.
+    }
+  }
+  const saveRemote = () => cloudflareRequest<{ ok: boolean }>("/api/profile", {
+    method: "PUT",
+    body: JSON.stringify(profile)
+  });
+  try {
+    await saveRemote();
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("401") && await authenticateCloudflareWrite()) {
+      await saveRemote();
     }
   }
   return profile;
@@ -559,6 +618,21 @@ export async function persistWorkflowMutation(
   patch: Partial<WorkflowState>
 ): Promise<OpportunityRecord> {
   const updated = applyWorkflowTransition(record, patch);
+
+  const saveCloudflare = () => cloudflareRequest(`/api/workflows/${encodeURIComponent(updated.id)}`, {
+    method: "PUT",
+    body: JSON.stringify(updated.workflow)
+  });
+  let savedToCloudflare = false;
+  try {
+    await saveCloudflare();
+    savedToCloudflare = true;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("401") && await authenticateCloudflareWrite()) {
+      await saveCloudflare();
+      savedToCloudflare = true;
+    }
+  }
 
   // 1. Immediately persist synchronously to local storage map for instant zero-latency UI durability
   const map = loadPersistedCrmMap();
@@ -575,15 +649,17 @@ export async function persistWorkflowMutation(
   };
   savePersistedCrmMap(map);
 
-  // 2. Persist to Neon PostgreSQL via backend API
-  try {
-    await fetch("/api/workflow", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ opportunityId: updated.id, patch })
-    });
-  } catch (err) {
-    console.warn("Neon workflow persistence error:", err);
+  // Legacy fallback for deployments that have not moved to the Cloudflare Worker.
+  if (!savedToCloudflare) {
+    try {
+      await fetch("/api/workflow", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ opportunityId: updated.id, patch })
+      });
+    } catch (err) {
+      console.warn("Legacy workflow persistence error:", err);
+    }
   }
 
   // 3. Persist to canonical Supabase database for dual-write compatibility

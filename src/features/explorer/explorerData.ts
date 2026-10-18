@@ -6,14 +6,12 @@
  *    - Bago Muse (BM)
  *    - Kattu AI (KA)
  *    - Haya Satnam (HS)
- *    - Haya Arsh (HA)
  *    (Sandy Muse is strictly excluded from the agent switcher)
  *
  * 2. DRIVE EXPLORER ROOT WORKSPACES:
  *    - BAGOMUSE - SANDY MUSE
  *    - MUSESATNAM
  *    - Projects KattuAI
- *    - Haya Arsh workspace
  *    - Job Apply
  *    - JOB_CMS_AGENTS
  */
@@ -105,17 +103,6 @@ export const WORKSPACE_AGENTS: ExplorerAgent[] = [
     status: "online",
     defaultWorkspaceId: "ws_musesatnam",
     description: "Orchestrates enterprise job applications, graduate engineering schemes, and Cyprus/EU visa-sponsoring roles across Facebook, Instagram, and LinkedIn portals."
-  },
-  {
-    id: "haya_arsh",
-    name: "Haya Arsh",
-    codename: "HAYA-ARSH",
-    role: "Workspace not configured yet",
-    initials: "HA",
-    themeColor: "#8b5cf6", // Violet / Purple
-    status: "idle",
-    defaultWorkspaceId: "ws_haya_arsh",
-    description: "Workspace not configured yet"
   }
 ];
 
@@ -548,17 +535,7 @@ export const WORKSPACE_TREE: WorkspaceConfig[] = [
     ]
   },
 
-  // 4. Haya Arsh workspace (Placeholder Only)
-  {
-    id: "ws_haya_arsh",
-    name: "Haya Arsh workspace",
-    ownerAgentId: "haya_arsh",
-    description: "Haya Arsh / Workspace not configured yet / No data sources connected.",
-    sheets: [],
-    folders: []
-  },
-
-  // 5. Job Apply
+  // 4. Job Apply
   {
     id: "ws_job_apply",
     name: "Job Apply",

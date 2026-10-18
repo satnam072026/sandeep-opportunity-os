@@ -18,7 +18,9 @@ export const SyncStatus: React.FC<SyncStatusProps> = ({
     <span className="os-sync-pill" title={`Latest verified dataset: ${lastSyncedAt}`}>
       <span className="os-sync-dot" />
       <span className="mono" style={{ fontSize: "11px" }}>
-        {mode === "NEON_LIVE"
+        {mode === "CLOUDFLARE_D1_LIVE"
+          ? "CLOUDFLARE D1 LIVE"
+          : mode === "NEON_LIVE"
           ? "NEON POSTGRES LIVE"
           : mode === "SUPABASE_LIVE"
             ? "SUPABASE LIVE"

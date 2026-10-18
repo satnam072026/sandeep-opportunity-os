@@ -776,15 +776,15 @@ describe("Sandeep Opportunity OS — Production Engine & Data Verification Suite
     assert.ok(preserved.activity_history.length >= 1);
   });
 
-  it("27. AI Agent Registry contains 4 distinct autonomous research agents with correct pipeline bindings and backward-compatible alias resolution", () => {
+  it("27. AI Agent Registry contains 3 configured research agents with correct pipeline bindings and backward-compatible alias resolution", () => {
     const agents = getAgents();
-    assert.equal(agents.length, 4);
+    assert.equal(agents.length, 3);
 
     const ids = agents.map((a) => a.id);
-    assert.deepEqual(ids, ["bago_muse", "haya_satnam", "kattu_ai", "haya_arsh"]);
+    assert.deepEqual(ids, ["bago_muse", "haya_satnam", "kattu_ai"]);
 
-    assert.equal(AGENT_REGISTRY.length, 4);
-    assert.equal(getAgents().length, 4);
+    assert.equal(AGENT_REGISTRY.length, 3);
+    assert.equal(getAgents().length, 3);
     assert.equal(getAgentForSource("muse_social_job_hunter")?.id, "bago_muse");
 
     const bago = getAgentById("bago_muse");
@@ -819,10 +819,7 @@ describe("Sandeep Opportunity OS — Production Engine & Data Verification Suite
     const katooAlias = getAgentById("katoo_spark");
     assert.equal(katooAlias.id, "kattu_ai");
 
-    const arsh = getAgentById("haya_arsh");
-    assert.equal(arsh.name, "Haya Arsh");
-    assert.equal(arsh.status, "setup_required");
-    assert.equal(arsh.connectedSources.length, 0);
+    assert.equal(getAgentById("haya_arsh"), undefined);
   });
 
   it("28. Multi-agent provenance tracking preserves discovering agents and merges multiple discoveries", () => {
