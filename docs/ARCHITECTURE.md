@@ -10,14 +10,14 @@ Before designing or writing application code, we inspected Sandeep Gautam's live
   * **Flagship Proof Points**: [Orama Design & Build](https://www.sandeep-gautam.com/work/orama-design-build) (100-Lighthouse SSR renovation of a legacy GoDaddy contractor site in Hertfordshire/North London), [Nikolas Leontides Legal Booking](https://www.sandeep-gautam.com/work/nikolas-lawyer-booking) (interactive legal consultation scheduling portal in Nicosia), [Clipboard Sync](https://www.sandeep-gautam.com/work/clipboard-sync) (Supabase Realtime PWA on Hostinger), plus `BusinessLending.uk`, `House Pour Vodka`, and `Spirits Export Boost`.
   * **Non-Inferred Legal & Eligibility Rule**: Citizenship, EU/EEA statutory fee status, and Cyprus full-time work authorization category are initialized to `UNKNOWN` in the database and Profile Configurator so the scoring engine never fabricates legal status from Cyprus study history.
 * **Hosting & Deployment Architecture**:
-  * **GitHub (`SandeepProjects`) + Hostinger Web App Hosting**: GitHub stores **application code only**. Live opportunity data resides in **PostgreSQL / Supabase** and synchronizes by persistent `Record ID` to the 6-tab **Google Sheet** ([Sandeep Opportunity OS — Master Sync Sheet.xlsx](https://drive.google.com/file/d/19igEOYpemKTRojy4b94QPbCE78gT7n2O/view?usp=drivesdk)), so daily research updates appear in the dashboard without requiring a Git commit or redeployment.
+  * **GitHub (`SandeepProjects`) + Cloudflare Workers**: GitHub stores application code while live opportunity data resides in Cloudflare D1 and synchronizes by persistent `Record ID` to the 6-tab **Google Sheet** ([Sandeep Opportunity OS — Master Sync Sheet.xlsx](https://drive.google.com/file/d/19igEOYpemKTRojy4b94QPbCE78gT7n2O/view?usp=drivesdk)), so daily research updates appear without a Git commit or redeployment.
 
 ## 2. System Data Flow & Architecture
 
 | Architectural Layer | Technology Choice | Role & Rationale |
 | :--- | :--- | :--- |
 | **Frontend Application** | React 19 + TypeScript (Strict) + Vite + Tailwind CSS | Matches Sandeep's core stack on [sandeep-gautam.com](https://www.sandeep-gautam.com/) and deploys cleanly to Hostinger via GitHub. |
-| **Canonical Database** | PostgreSQL (Supabase) + Local SQLite Mirror | Enforces relational integrity across `profiles`, `organizations`, `opportunities`, `opportunity_sources`, `workflow_states`, and `research_runs` with Row-Level Security (RLS). |
+| **Canonical Database** | Cloudflare D1 | Stores profiles, opportunities, workflow state, research runs, and leased agent jobs behind the same-origin Worker API. |
 | **Synchronized Control Layer** | Google Sheets API v4 (6-Tab Master Workbook) | Provides a human-friendly 6-tab review layer synced by persistent `Record ID` (`OPP-FL-001` .. `OPP-RM-006`) without overwriting user CRM columns. |
 | **Daily Automation** | Cloud Scheduled Runner + GitHub Actions Cron | Runs daily at 09:00 Cyprus time independently of Sandeep's laptop, executing discovery, verification, deduplication, scoring, and Sheet synchronization. |
 
@@ -40,6 +40,6 @@ Before designing or writing application code, we inspected Sandeep Gautam's live
 
 ## 5. Security, Testing & Hostinger Deployment Runbook
 
-1. **Zero Secret Exposure**: Only public keys (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_GOOGLE_SHEET_ID`) use the `VITE_` prefix. Server-only credentials (`SUPABASE_SERVICE_ROLE_KEY`, `GOOGLE_PRIVATE_KEY`, `GEMINI_API_KEY`) remain strictly in backend secrets.
+1. **Zero Secret Exposure**: The browser receives no database credential. `DATABASE_URL`, `APP_SESSION_SECRET`, `APP_ADMIN_PASSWORD`, `AGENT_API_TOKEN`, `GOOGLE_PRIVATE_KEY`, and model API keys remain server-only deployment secrets.
 2. **HTTP Security Headers (`public/_headers`)**: Enforces 2-year HSTS (`max-age=63072000; includeSubDomains; preload`), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, and a locked-down `Content-Security-Policy`.
 3. **Automated Verification Suite**: Run `node tests/opportunity_os.test.mjs` to execute all 8 unit and integration checks (URL canonicalization, fingerprint deduplication, multi-source provenance merging, Regional Restriction Gate, Seniority Gate, `UNKNOWN` profile preservation, idempotent Google Sheets sync, and full 9-stage pipeline execution).

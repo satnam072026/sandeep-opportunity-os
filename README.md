@@ -11,7 +11,8 @@ Continuously discovers, verifies, deduplicates, scores, and tracks high-value op
 ## Repository Structure
 
 - `docs/` — Complete system documentation (`ARCHITECTURE.md`, `DATA_MODEL.md`, `RESEARCH_PIPELINE.md`, `SCORING.md`, `SHEETS_SYNC.md`, `SECURITY.md`, `DEPLOYMENT.md`)
-- `supabase/migrations/001_opportunity_os_schema.sql` — PostgreSQL + RLS relational schema
+- `cloudflare/migrations/0001_schema.sql` — Cloudflare D1 schema, including multi-agent job leasing
+- `worker/` — same-origin Cloudflare Worker API; secrets never enter the browser bundle
 - `src/types/opportunity.ts` — Strict TypeScript domain models
 - `src/engine/scoring.ts` — Explainable multi-component scoring & gate engine
 - `src/engine/deduplication.ts` — Canonical URL & fingerprint deduplicator
@@ -23,3 +24,18 @@ Continuously discovers, verifies, deduplicates, scores, and tracks high-value op
 ```bash
 node tests/opportunity_os.test.mjs
 ```
+
+## Cloudflare deployment
+
+The application targets **Cloudflare D1 + Workers**. Supabase, Neon, and Alibaba database clients have been removed.
+
+Live deployment: `https://sandeep-opportunity-os.sandeep-os.workers.dev`
+
+1. Create a D1 database and copy its ID into `wrangler.jsonc`.
+2. Run `npm run db:remote:setup` to apply the schema and verified seed.
+3. Add the three Worker secrets documented in `.env.example`.
+4. Run `npm run deploy`.
+
+Do not prefix database credentials, administrator passwords, or agent tokens with `VITE_`; Vite variables are public.
+
+For a zero-cost end-to-end localhost test, run `npm run start:local` and open the URL printed by Wrangler. It uses an isolated local D1 database seeded with the verified dataset.

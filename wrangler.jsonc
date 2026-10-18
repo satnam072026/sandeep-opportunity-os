@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sandeep-opportunity-os",
+  "main": "worker/index.mjs",
+  "compatibility_date": "2026-10-12",
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "sandeep-opportunity-os",
+      "database_id": "f92c1fc6-c5b6-45ae-b75f-8359e0be9186",
+      "migrations_dir": "cloudflare/migrations"
+    }
+  ]
+}

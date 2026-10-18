@@ -4,10 +4,18 @@
 
 1. Create a private or public repository under `https://github.com/SandeepProjects/sandeep-opportunity-os`.
 2. Push this repository (`git init && git add . && git commit -m "feat: initial Sandeep Opportunity OS release" && git push`).
-3. In **Hostinger hPanel → Websites → Connect to GitHub**, select `SandeepProjects/sandeep-opportunity-os` (Build command: `npm run build`, Output directory: `dist`).
-4. Set public read-only environment variables (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_GOOGLE_SHEET_ID`) in hPanel.
+3. Deploy the full-stack application to Cloudflare Workers with `npm run deploy`.
+4. Set the Worker secrets documented in `.env.example`. Keep `VITE_API_BASE_URL` blank because the frontend and API share a domain.
 
 ## 2. How Live Data Updates Work Without Git Commits
 
-- Daily scheduled runs update **Supabase / Google Sheets** directly.
-- The frontend reads live data via the configured Google Sheet CSV/JSON endpoint or Supabase REST client on load and when clicking **Sync Live Sheet**, so new opportunities appear immediately with zero code redeployments.
+- Daily scheduled workers update **Cloudflare D1 / Google Sheets** through the authenticated agent API.
+- The frontend reads live data from the same-origin Worker API, so secrets never appear in JavaScript or browser storage.
+
+## Cloudflare D1 setup
+
+1. Create the D1 database named `sandeep-opportunity-os`.
+2. Put its database ID in `wrangler.jsonc`.
+3. Run `npm run db:remote:setup` once.
+4. Set strong, independent `APP_SESSION_SECRET`, `APP_ADMIN_PASSWORD`, and `AGENT_API_TOKEN` Worker secrets.
+5. Deploy and verify `/api/health` before enabling agents.

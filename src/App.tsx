@@ -139,8 +139,8 @@ const MainContent: React.FC = () => {
     }
   }, [repoState]);
 
-  const handleUpdateProfile = useCallback((nextProfile: CandidateProfile) => {
-    const persisted = persistCandidateProfile(nextProfile);
+  const handleUpdateProfile = useCallback(async (nextProfile: CandidateProfile) => {
+    const persisted = await persistCandidateProfile(nextProfile);
     setRepoState((prev) => (prev ? { ...prev, profile: persisted } : prev));
   }, []);
 
