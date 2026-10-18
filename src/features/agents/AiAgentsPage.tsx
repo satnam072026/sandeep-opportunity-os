@@ -79,7 +79,7 @@ export const AiAgentsPage: React.FC<AiAgentsPageProps> = ({
       <div className="os-metric-strip">
         <div className="os-metric-card">
           <div className="os-metric-label">ACTIVE AGENT FLEET</div>
-          <div className="os-metric-val mono">5 / 5</div>
+          <div className="os-metric-val mono">{AGENT_REGISTRY.length} / {AGENT_REGISTRY.length}</div>
           <div className="os-metric-delta good">● All Autonomous Agents Online</div>
         </div>
         <div className="os-metric-card">
@@ -116,7 +116,7 @@ export const AiAgentsPage: React.FC<AiAgentsPageProps> = ({
             }}
             onClick={() => setSelectedAgentId("ALL")}
           >
-            All Agents (5)
+            All Agents ({AGENT_REGISTRY.length})
           </button>
           {AGENT_REGISTRY.map((agent) => (
             <button

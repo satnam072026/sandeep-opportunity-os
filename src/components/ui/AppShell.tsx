@@ -50,7 +50,7 @@ const ROUTE_TITLES: Record<AppRoutePath, { title: string; context: string }> = {
   "/remote": { title: "Remote & Internships", context: "Kattu AI · Distributed EU/EMEA Roles Excluding US/Africa Lockouts" },
   "/crm": { title: "Saved & CRM Follow-ups", context: "Sandeep's Protected CRM Workspace · Statuses, Notes & Follow-up Dates" },
   "/saved": { title: "Saved & CRM Follow-ups", context: "Sandeep's Protected CRM Workspace · Statuses, Notes & Follow-up Dates" },
-  "/operations": { title: "System Operations & Evidence", context: "Unified 5-Hour Sync Engine, Neon PostgreSQL & Health Verification" },
+  "/operations": { title: "System Operations & Evidence", context: "Unified Sync Engine, Cloudflare D1 & Health Verification" },
   "/profile": { title: "Candidate Profile & Governance", context: "Sandeep Gautam · BSc First-Class Honors, 0–2 yr Target & Seniority Gates" }
 };
 
@@ -391,7 +391,7 @@ export const AppShell: React.FC<AppShellProps> = ({
                 onClick={onSyncNow}
                 disabled={isSyncing}
                 aria-label={isSyncing ? "Syncing Drive and Sheets data..." : "Sync Data from Google Sheets and Drive"}
-                title="Execute canonical sync from Google Sheets, Drive XLSX, and update Neon PostgreSQL"
+                title="Execute canonical sync from Google Sheets and Drive sources"
                 style={{
                   padding: "6px 14px",
                   fontSize: "12.5px",

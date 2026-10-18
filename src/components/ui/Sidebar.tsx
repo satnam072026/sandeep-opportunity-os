@@ -263,7 +263,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span
             className="os-badge neutral mono"
             style={{ fontSize: "10px", padding: "2px 6px", opacity: 0.85 }}
-            title="Candidate profile active in Neon PostgreSQL"
+            title="Candidate profile active in the canonical Opportunity OS database"
           >
             Verified Profile
           </span>
