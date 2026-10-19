@@ -89,6 +89,8 @@ INSERT INTO public.agents (
     NOW()
 ),
 (
+    -- HISTORICAL MIGRATION NOTE: haya_arsh was a historical placeholder and is DECOMMISSIONED in Migration 011.
+    -- Never executed or registered in active production fleet configuration (strictly 3 agents: Bago Muse, Haya Satnam, Kattu AI).
     'haya_arsh',
     'Haya Arsh',
     'haya-arsh',

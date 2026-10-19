@@ -212,9 +212,25 @@ export default defineConfig({
     sourcemap: true,
     rollupOptions: {
       output: {
-        manualChunks: {
-          react: ["react", "react-dom"],
-          icons: ["lucide-react"]
+        manualChunks(id) {
+          if (id.includes("node_modules")) {
+            if (id.includes("react") || id.includes("react-dom") || id.includes("scheduler")) {
+              return "vendor-react";
+            }
+            if (id.includes("lucide-react")) {
+              return "vendor-icons";
+            }
+            if (id.includes("@supabase")) {
+              return "vendor-supabase";
+            }
+            return "vendor";
+          }
+          if (id.includes("verified_seed_24.json")) {
+            return "seed-data";
+          }
+          if (id.includes("explorerData")) {
+            return "explorer-data";
+          }
         }
       }
     }

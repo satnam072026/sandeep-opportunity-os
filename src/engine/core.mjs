@@ -466,24 +466,43 @@ export function applyWorkflowTransition(record, patch, isoDate = getLocalIsoDate
  */
 export function syncDatabaseToSheetRows(existingSheetRows, incomingMachineRecords) {
   const rowMap = new Map();
+  const urlMap = new Map();
+  const fpMap = new Map();
+  const originalExistingIds = new Set();
+
   for (const row of existingSheetRows) {
     const id = row.record_id || row.id;
-    if (id) rowMap.set(id, { ...row, record_id: id });
+    if (id) {
+      rowMap.set(id, { ...row, record_id: id });
+      originalExistingIds.add(id);
+    }
+    const cUrl = canonicalizeUrl(row.canonical_source_url || row.source_url || "");
+    if (cUrl && id) urlMap.set(cUrl, id);
+    const fp = row.fingerprint || computeFingerprint(row);
+    if (fp && id) fpMap.set(fp, id);
   }
 
-  let inserted = 0;
-  let updated = 0;
+  const insertedIds = new Set();
+  const updatedIds = new Set();
   let preservedUserFields = 0;
 
   for (const machine of incomingMachineRecords) {
     const id = machine.id || machine.record_id;
     if (!id) continue;
-    const existing = rowMap.get(id);
+    const cUrl = canonicalizeUrl(machine.canonical_source_url || machine.source_url || "");
+    const fp = machine.fingerprint || computeFingerprint(machine);
+
+    const matchedId =
+      (rowMap.has(id) ? id : null) ||
+      (cUrl ? urlMap.get(cUrl) : null) ||
+      (fp ? fpMap.get(fp) : null);
+
+    const existing = matchedId ? rowMap.get(matchedId) : null;
 
     if (!existing) {
-      inserted += 1;
+      insertedIds.add(id);
       const wf = machine.workflow || {};
-      rowMap.set(id, {
+      const newRow = {
         ...machine,
         record_id: id,
         user_status: wf.status || machine.user_status || "New",
@@ -493,13 +512,20 @@ export function syncDatabaseToSheetRows(existingSheetRows, incomingMachineRecord
         contacted_date: wf.contacted_date ?? machine.contacted_date ?? null,
         applied_date: wf.applied_date ?? machine.applied_date ?? null,
         personal_notes: wf.personal_notes ?? machine.personal_notes ?? ""
-      });
+      };
+      rowMap.set(id, newRow);
+      if (cUrl) urlMap.set(cUrl, id);
+      if (fp) fpMap.set(fp, id);
     } else {
-      updated += 1;
+      const targetId = matchedId || id;
+      if (originalExistingIds.has(targetId)) {
+        updatedIds.add(targetId);
+      }
       const merged = {
         ...existing,
         ...machine,
-        record_id: id
+        record_id: targetId,
+        id: targetId
       };
       for (const field of USER_OWNED_FIELDS) {
         if (existing[field] !== undefined && existing[field] !== null && existing[field] !== "") {
@@ -519,14 +545,20 @@ export function syncDatabaseToSheetRows(existingSheetRows, incomingMachineRecord
           personal_notes: merged.personal_notes ?? merged.workflow.personal_notes
         };
       }
-      rowMap.set(id, merged);
+      rowMap.set(targetId, merged);
     }
   }
 
+  const rows = Array.from(rowMap.values());
+  const inserted = insertedIds.size;
+  const updated = updatedIds.size;
+  const unchanged = Math.max(0, originalExistingIds.size - updated);
+
   return {
-    rows: Array.from(rowMap.values()),
+    rows,
     inserted,
     updated,
+    unchanged,
     preservedUserFields
   };
 }

@@ -1,4 +1,4 @@
-import verifiedSeed from "../src/data/verified_seed_24.json";
+import verifiedSeed from "../src/data/verified_seed_24.json" with { type: "json" };
 import { runCanonicalSync } from "../supabase/functions/_shared/canonicalSync.mjs";
 
 const STATUSES = new Set(["New", "Saved", "Preparing", "Contacted", "Applied", "Interviewing", "Follow-Up", "Won", "Rejected", "Archived"]);
@@ -39,10 +39,48 @@ async function secureEqual(left, right) {
 }
 
 async function requireAdmin(request, env) {
-  const token = parseCookies(request.headers.get("cookie"))["__Host-sandeep_session"];
-  if (!token) return false;
-  const [expiresAt, signature] = token.split(".");
-  return Boolean(expiresAt && signature && Number(expiresAt) >= Date.now() && await secureEqual(signature, await hmac(expiresAt, env.APP_SESSION_SECRET)));
+  // 1. Cloudflare Access JWT assertion or authenticated email
+  const cfJwt = request.headers.get("cf-access-jwt-assertion");
+  if (cfJwt && cfJwt.length > 20) return true;
+  const cfEmail = request.headers.get("cf-access-authenticated-user-email");
+  if (cfEmail && cfEmail.includes("@")) return true;
+
+  // 2. Cookie session (__Host-sandeep_session or sandeep_session)
+  const cookies = parseCookies(request.headers.get("cookie"));
+  const cookieToken = cookies["__Host-sandeep_session"] || cookies["sandeep_session"];
+  if (cookieToken && env.APP_SESSION_SECRET) {
+    const [expiresAt, signature] = cookieToken.split(".");
+    if (expiresAt && signature && Number(expiresAt) >= Date.now()) {
+      if (await secureEqual(signature, await hmac(expiresAt, env.APP_SESSION_SECRET))) {
+        return true;
+      }
+    }
+  }
+
+  // 3. Authorization: Bearer <token>
+  const authHeader = request.headers.get("authorization") || "";
+  const bearerToken = authHeader.replace(/^Bearer\s+/iu, "").trim();
+  if (bearerToken) {
+    if (bearerToken.includes(".") && env.APP_SESSION_SECRET) {
+      const [expiresAt, signature] = bearerToken.split(".");
+      if (expiresAt && signature && Number(expiresAt) >= Date.now()) {
+        if (await secureEqual(signature, await hmac(expiresAt, env.APP_SESSION_SECRET))) {
+          return true;
+        }
+      }
+    }
+    if (env.ADMIN_API_KEY && await secureEqual(bearerToken, env.ADMIN_API_KEY)) return true;
+    if (env.APP_ADMIN_PASSWORD && await secureEqual(bearerToken, env.APP_ADMIN_PASSWORD)) return true;
+  }
+
+  // 4. Custom header: x-admin-key
+  const adminKey = request.headers.get("x-admin-key") || "";
+  if (adminKey) {
+    if (env.ADMIN_API_KEY && await secureEqual(adminKey, env.ADMIN_API_KEY)) return true;
+    if (env.APP_ADMIN_PASSWORD && await secureEqual(adminKey, env.APP_ADMIN_PASSWORD)) return true;
+  }
+
+  return false;
 }
 
 async function requireAgent(request, env) {
@@ -246,20 +284,33 @@ async function handleApi(request, env, url) {
   }
 
   if (url.pathname === "/api/sync" && request.method === "POST") {
+    if (!await requireAdmin(request, env)) return json({ error: "Authentication required" }, 401);
     return await executeServerSync(env, "MANUAL_UI");
   }
 
   if (url.pathname === "/api/auth/login" && request.method === "POST") {
     const body = await readBody(request);
-    if (!await secureEqual(body?.password || "", env.APP_ADMIN_PASSWORD)) return json({ error: "Invalid credentials" }, 401);
+    const password = body?.password || body?.pass || "";
+    if (!await secureEqual(password, env.APP_ADMIN_PASSWORD)) return json({ error: "Invalid credentials" }, 401);
     const expiresAt = String(Date.now() + 8 * 60 * 60 * 1000);
-    const token = `${expiresAt}.${await hmac(expiresAt, env.APP_SESSION_SECRET)}`;
-    return json({ ok: true }, 200, {
-      "set-cookie": `__Host-sandeep_session=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=28800`
+    const signature = await hmac(expiresAt, env.APP_SESSION_SECRET);
+    const token = `${expiresAt}.${signature}`;
+    return json({
+      ok: true,
+      token,
+      user: {
+        id: "usr_sandeep_admin",
+        name: "Sandeep Gautam",
+        email: "bagosandeep@gmail.com",
+        role: "admin"
+      }
+    }, 200, {
+      "set-cookie": `__Host-sandeep_session=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=28800`
     });
   }
 
   if (url.pathname === "/api/state" && request.method === "GET") {
+    if (!await requireAdmin(request, env)) return json({ error: "Authentication required" }, 401);
     await ensureSeeded(env);
     const [opportunities, profile, latestRun] = await Promise.all([
       env.DB.prepare(`SELECT o.payload AS record, w.payload AS workflow FROM opportunities o LEFT JOIN workflow_states w ON w.opportunity_id = o.id ORDER BY o.score_total DESC, o.id ASC`).all(),

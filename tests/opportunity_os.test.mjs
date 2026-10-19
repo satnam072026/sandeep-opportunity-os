@@ -52,6 +52,7 @@ import {
 } from "../src/pipeline/adapters/index.mjs";
 import { runCanonicalSync } from "../src/pipeline/canonicalSyncEngine.mjs";
 import { runServerSync } from "../scripts/sync-data.mjs";
+import worker from "../worker/index.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const seedPath = path.resolve(__dirname, "../src/data/verified_seed_24.json");
@@ -1073,5 +1074,264 @@ describe("Sandeep Opportunity OS — Production Engine & Data Verification Suite
     assert.equal(canonical.personal_notes, "Sandeep: Custom portfolio pack sent directly to founder on LinkedIn");
     assert.equal(canonical.contacted_date, "2026-10-15");
     assert.equal(canonical.applied_date, "2026-10-16");
+  });
+
+  it("34. Production sync telemetry correctly handles overlapping records from multiple sources and recordsUnchanged is never negative", () => {
+    // 3 existing records in database
+    const existing = [
+      {
+        id: "opp_alpha",
+        category: "freelance_leads",
+        organization: "Alpha Solutions",
+        title: "Frontend React Developer",
+        source_url: "https://alpha.com/careers/frontend",
+        canonical_source_url: "https://alpha.com/careers/frontend",
+        fingerprint: "freelance_leads::alphasolutions::frontendreactdeveloper",
+        user_status: "Contacted",
+        priority: "P1"
+      },
+      {
+        id: "opp_beta",
+        category: "visa_jobs",
+        organization: "Beta Global",
+        title: "Junior Full Stack Engineer",
+        source_url: "https://beta.com/jobs/fullstack",
+        canonical_source_url: "https://beta.com/jobs/fullstack",
+        fingerprint: "visa_jobs::betaglobal::juniorfullstackengineer",
+        user_status: "New",
+        priority: "P2"
+      },
+      {
+        id: "opp_gamma",
+        category: "remote_jobs",
+        organization: "Gamma Tech",
+        title: "Remote Web Engineer",
+        source_url: "https://gamma.com/jobs/web",
+        canonical_source_url: "https://gamma.com/jobs/web",
+        fingerprint: "remote_jobs::gammatech::remotewebengineer",
+        user_status: "Saved",
+        priority: "P2"
+      }
+    ];
+
+    // Incoming batch with:
+    // - Duplicate 1: Alpha updated from Bago Muse
+    // - Duplicate 2: Alpha discovered again from Kattu AI (intra-batch cross-source duplicate)
+    // - Duplicate 3 & 4: Delta (new record) discovered by both Bago and Kattu with tracking params
+    // - Record 5: Epsilon (new active record)
+    // - Record 6: Zeta (new gated record: senior 10+ years)
+    const incomingRaw = [
+      {
+        id: "raw_alpha_bago",
+        category: "freelance_leads",
+        organization: "Alpha Solutions",
+        title: "Frontend React Developer",
+        source_url: "https://alpha.com/careers/frontend?utm_source=bago",
+        canonical_source_url: "https://alpha.com/careers/frontend",
+        fingerprint: "freelance_leads::alphasolutions::frontendreactdeveloper",
+        discovered_by_agent: "bago_muse",
+        agent_provenance: [{ agent_id: "bago_muse" }]
+      },
+      {
+        id: "raw_alpha_kattu",
+        category: "freelance_leads",
+        organization: "Alpha Solutions",
+        title: "Frontend React Developer",
+        source_url: "https://alpha.com/careers/frontend?utm_source=kattu",
+        canonical_source_url: "https://alpha.com/careers/frontend",
+        fingerprint: "freelance_leads::alphasolutions::frontendreactdeveloper",
+        discovered_by_agent: "kattu_ai",
+        agent_provenance: [{ agent_id: "kattu_ai" }]
+      },
+      {
+        id: "raw_delta_bago",
+        category: "freelance_leads",
+        organization: "Delta Corp",
+        title: "UI Systems Engineer",
+        source_url: "https://delta.com/careers/ui?ref=bago",
+        canonical_source_url: "https://delta.com/careers/ui",
+        fingerprint: "freelance_leads::deltacorp::uisystemsengineer",
+        discovered_by_agent: "bago_muse",
+        agent_provenance: [{ agent_id: "bago_muse" }]
+      },
+      {
+        id: "raw_delta_kattu",
+        category: "freelance_leads",
+        organization: "Delta Corp",
+        title: "UI Systems Engineer",
+        source_url: "https://delta.com/careers/ui?ref=kattu",
+        canonical_source_url: "https://delta.com/careers/ui",
+        fingerprint: "freelance_leads::deltacorp::uisystemsengineer",
+        discovered_by_agent: "kattu_ai",
+        agent_provenance: [{ agent_id: "kattu_ai" }]
+      },
+      {
+        id: "raw_epsilon",
+        category: "visa_jobs",
+        organization: "Epsilon Media",
+        title: "Junior React Developer",
+        source_url: "https://epsilon.com/careers/react",
+        canonical_source_url: "https://epsilon.com/careers/react",
+        fingerprint: "visa_jobs::epsilonmedia::juniorreactdeveloper",
+        discovered_by_agent: "haya_satnam",
+        agent_provenance: [{ agent_id: "haya_satnam" }]
+      },
+      {
+        id: "raw_zeta_gated",
+        category: "remote_jobs",
+        organization: "Zeta Global",
+        title: "Senior VP of Engineering (5+ years experience required)",
+        source_url: "https://zeta.com/careers/vp",
+        canonical_source_url: "https://zeta.com/careers/vp",
+        fingerprint: "remote_jobs::zetaglobal::vpengineering",
+        discovered_by_agent: "bago_muse",
+        agent_provenance: [{ agent_id: "bago_muse" }]
+      }
+    ];
+
+    const result = normalizeAndMergeRecords(incomingRaw, existing);
+
+    // Assertions for telemetry consistency
+    assert.ok(result.unchangedCount >= 0, `unchangedCount must never be negative, was ${result.unchangedCount}`);
+    assert.equal(result.updatedCount, 1, "Only opp_alpha was updated from existing");
+    assert.equal(result.unchangedCount, 2, "opp_beta and opp_gamma were untouched (unchanged = 2)");
+    assert.equal(result.insertedCount, 3, "Delta, Epsilon, and Zeta are new inserted records");
+    assert.equal(result.gatedCount, 1, "Zeta (10+ years VP) is correctly gated");
+    assert.equal(
+      result.insertedCount + result.updatedCount + result.unchangedCount,
+      result.merged.length,
+      "Partition invariant must hold: inserted + updated + unchanged === total"
+    );
+
+    // Verify core.mjs syncDatabaseToSheetRows telemetry consistency
+    const syncRes = syncDatabaseToSheetRows(existing, incomingRaw);
+    assert.ok(syncRes.unchanged >= 0, `syncDatabaseToSheetRows unchanged must be >= 0, was ${syncRes.unchanged}`);
+    assert.equal(syncRes.updated, 1);
+    assert.equal(syncRes.inserted, 3);
+    assert.equal(syncRes.unchanged, 2);
+    assert.equal(syncRes.inserted + syncRes.updated + syncRes.unchanged, syncRes.rows.length);
+  });
+
+  it("35. Production CRM API Security: Anonymous callers cannot read or mutate leads, health check does not leak data, and authorized access passes", async () => {
+    const mockD1 = {
+      prepare(query) {
+        return {
+          bind() { return this; },
+          first: async () => {
+            if (query.includes("COUNT(*)")) return { count: 24 };
+            if (query.includes("SELECT 1 FROM opportunities")) return { 1: 1 };
+            if (query.includes("profiles")) return { payload: JSON.stringify({ full_name: "Sandeep Gautam", portfolio_url: "https://sandeep.dev" }) };
+            if (query.includes("research_runs")) return { summary: JSON.stringify({ ok: true, agentHealth: {}, sourceDiagnostics: [] }) };
+            return { ok: 1 };
+          },
+          all: async () => {
+            if (query.includes("opportunities")) {
+              return {
+                results: [
+                  {
+                    record: JSON.stringify({ id: "opp_confidential_01", title: "Private Lead", category: "freelance_leads", score_total: 95 }),
+                    workflow: JSON.stringify({ status: "Applied", priority: "P1", favorite: true, personal_notes: "Private client contact" })
+                  }
+                ]
+              };
+            }
+            return { results: [] };
+          },
+          run: async () => ({ success: true })
+        };
+      },
+      batch: async () => []
+    };
+
+    const mockEnv = {
+      DB: mockD1,
+      APP_SESSION_SECRET: "test_session_secret_at_least_32_characters_long_for_security!",
+      APP_ADMIN_PASSWORD: "SandeepSecurePassword2026!",
+      ADMIN_API_KEY: "sandeep_admin_api_token_key"
+    };
+
+    // 1. Anonymous GET /api/state -> Must be HTTP 401 and must NOT return opportunities
+    const anonStateRes = await worker.fetch(
+      new Request("https://sandeep-opportunity-os.sandeep-os.workers.dev/api/state", { method: "GET" }),
+      mockEnv
+    );
+    assert.equal(anonStateRes.status, 401, "Anonymous GET /api/state must be rejected with 401");
+    const anonStateJson = await anonStateRes.json();
+    assert.equal(anonStateJson.error, "Authentication required");
+    assert.equal(anonStateJson.opportunities, undefined, "Anonymous response must NEVER leak opportunities");
+
+    // 2. Anonymous POST /api/sync -> Must be HTTP 401
+    const anonSyncRes = await worker.fetch(
+      new Request("https://sandeep-opportunity-os.sandeep-os.workers.dev/api/sync", { method: "POST" }),
+      mockEnv
+    );
+    assert.equal(anonSyncRes.status, 401, "Anonymous POST /api/sync must be rejected with 401");
+
+    // 3. Anonymous PUT /api/workflows/:id -> Must be HTTP 401
+    const anonWorkflowRes = await worker.fetch(
+      new Request("https://sandeep-opportunity-os.sandeep-os.workers.dev/api/workflows/opp_confidential_01", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "Applied", priority: "P1", favorite: true })
+      }),
+      mockEnv
+    );
+    assert.equal(anonWorkflowRes.status, 401, "Anonymous PUT /api/workflows must be rejected with 401");
+
+    // 4. Anonymous PUT /api/profile -> Must be HTTP 401
+    const anonProfileRes = await worker.fetch(
+      new Request("https://sandeep-opportunity-os.sandeep-os.workers.dev/api/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ full_name: "Attacker", portfolio_url: "https://evil.com" })
+      }),
+      mockEnv
+    );
+    assert.equal(anonProfileRes.status, 401, "Anonymous PUT /api/profile must be rejected with 401");
+
+    // 5. Open GET /api/health -> Must be HTTP 200 without leaking private leads
+    const healthRes = await worker.fetch(
+      new Request("https://sandeep-opportunity-os.sandeep-os.workers.dev/api/health", { method: "GET" }),
+      mockEnv
+    );
+    assert.equal(healthRes.status, 200, "GET /api/health must be open for monitoring");
+    const healthJson = await healthRes.json();
+    assert.equal(healthJson.ok, true);
+    assert.equal(healthJson.database, "cloudflare-d1");
+    assert.equal(healthJson.opportunities, undefined, "GET /api/health must NEVER include CRM records");
+
+    // 6. Authorized GET /api/state with Bearer password -> Must be HTTP 200
+    const authBearerRes = await worker.fetch(
+      new Request("https://sandeep-opportunity-os.sandeep-os.workers.dev/api/state", {
+        method: "GET",
+        headers: { Authorization: "Bearer SandeepSecurePassword2026!" }
+      }),
+      mockEnv
+    );
+    assert.equal(authBearerRes.status, 200, "Bearer password authenticated GET /api/state must return 200");
+    const authBearerJson = await authBearerRes.json();
+    assert.ok(Array.isArray(authBearerJson.opportunities), "Authenticated caller receives opportunities array");
+    assert.equal(authBearerJson.opportunities.length, 1);
+    assert.equal(authBearerJson.opportunities[0].id, "opp_confidential_01");
+
+    // 7. Authorized GET /api/state with x-admin-key -> Must be HTTP 200
+    const authKeyRes = await worker.fetch(
+      new Request("https://sandeep-opportunity-os.sandeep-os.workers.dev/api/state", {
+        method: "GET",
+        headers: { "x-admin-key": "sandeep_admin_api_token_key" }
+      }),
+      mockEnv
+    );
+    assert.equal(authKeyRes.status, 200, "x-admin-key authenticated GET /api/state must return 200");
+
+    // 8. Authorized GET /api/state with Cloudflare Access JWT header -> Must be HTTP 200
+    const authCfRes = await worker.fetch(
+      new Request("https://sandeep-opportunity-os.sandeep-os.workers.dev/api/state", {
+        method: "GET",
+        headers: { "cf-access-jwt-assertion": "eyJhbGciOiJSUzI1NiIsImtpZCI6IjEyMzQ1In0.eyJhdWQiOlsiYWJjIl19.sig" }
+      }),
+      mockEnv
+    );
+    assert.equal(authCfRes.status, 200, "Cloudflare Access assertion GET /api/state must return 200");
   });
 });

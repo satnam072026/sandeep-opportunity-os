@@ -1119,85 +1119,120 @@ export function normalizeAndMergeRecords(incomingRaw, existingRecords = []) {
   const existingByFp = new Map();
   const existingByUrl = new Map();
   const existingById = new Map();
+  const originalExistingIds = new Set();
 
   for (const rec of existingRecords) {
-    if (rec.id) existingById.set(rec.id, rec);
-    const fp = computeFingerprint(rec);
+    if (rec.id) {
+      existingById.set(rec.id, rec);
+      originalExistingIds.add(rec.id);
+    }
+    const fp = rec.fingerprint || computeFingerprint(rec);
     if (fp) existingByFp.set(fp, rec);
     const cUrl = canonicalizeUrl(rec.canonical_source_url || rec.source_url || "");
     if (cUrl) existingByUrl.set(cUrl, rec);
   }
 
-  let addedCount = 0;
-  let updatedCount = 0;
-  let preservedCount = 0;
-  let gatedCount = 0;
-
   const processedById = new Map();
-  const seenFp = new Set();
-  const seenUrls = new Set();
+  const processedByFp = new Map();
+  const processedByUrl = new Map();
+  const updatedExistingIds = new Set();
 
   for (const raw of incomingRaw) {
-    const fp = computeFingerprint(raw);
+    const fp = raw.fingerprint || computeFingerprint(raw);
     const cUrl = canonicalizeUrl(raw.canonical_source_url || raw.source_url || "");
 
-    // Find match in existing records or records already merged during this run
-    const match =
-      existingById.get(raw.id) ||
-      (cUrl ? existingByUrl.get(cUrl) : null) ||
-      (fp ? existingByFp.get(fp) : null);
+    // 1. Check for overlapping intra-batch duplicate (same record appearing in multiple sources)
+    const inBatchMatch =
+      (raw.id && processedById.get(raw.id)) ||
+      (cUrl && processedByUrl.get(cUrl)) ||
+      (fp && processedByFp.get(fp));
 
-    // Apply gating
+    if (inBatchMatch) {
+      // Cross-source duplicate in the incoming stream: merge provenance and URLs without double-counting
+      const combinedUrls = new Set([
+        ...(inBatchMatch.provenance_urls || [inBatchMatch.source_url]),
+        ...(raw.provenance_urls || [raw.source_url])
+      ].filter(Boolean));
+      inBatchMatch.provenance_urls = Array.from(combinedUrls);
+
+      if (Array.isArray(raw.agent_provenance)) {
+        const existingAgents = new Set(
+          (inBatchMatch.agent_provenance || []).map((p) => p.agent_id || p.agentId)
+        );
+        for (const ap of raw.agent_provenance) {
+          const aId = ap.agent_id || ap.agentId;
+          if (aId && !existingAgents.has(aId)) {
+            inBatchMatch.agent_provenance = [...(inBatchMatch.agent_provenance || []), ap];
+            existingAgents.add(aId);
+          }
+        }
+      }
+      continue;
+    }
+
+    // 2. Apply gating & scoring
     const gate = evaluateGating(raw);
     const scoredRaw = {
       ...raw,
-      ...gate
+      ...gate,
+      canonical_url: cUrl || raw.source_url,
+      fingerprint: fp,
+      provenance_urls: Array.from(
+        new Set([raw.source_url, ...(raw.provenance_urls || [])].filter(Boolean))
+      )
     };
 
-    if (!scoredRaw.is_active) {
-      gatedCount++;
-    }
+    // 3. Check for match in existing database records
+    const matchedExisting =
+      (raw.id && existingById.get(raw.id)) ||
+      (cUrl && existingByUrl.get(cUrl)) ||
+      (fp && existingByFp.get(fp));
 
-    if (match) {
-      const merged = preserveUserCrmFields(match, scoredRaw);
+    if (matchedExisting) {
+      updatedExistingIds.add(matchedExisting.id);
+      const merged = preserveUserCrmFields(matchedExisting, scoredRaw);
       processedById.set(merged.id, merged);
-      existingById.set(merged.id, merged);
-      if (cUrl) existingByUrl.set(cUrl, merged);
-      if (fp) existingByFp.set(fp, merged);
-      updatedCount++;
-      preservedCount++;
+      if (cUrl) processedByUrl.set(cUrl, merged);
+      if (fp) processedByFp.set(fp, merged);
     } else {
       processedById.set(scoredRaw.id, scoredRaw);
-      existingById.set(scoredRaw.id, scoredRaw);
-      if (cUrl) existingByUrl.set(cUrl, scoredRaw);
-      if (fp) existingByFp.set(fp, scoredRaw);
-      addedCount++;
+      if (cUrl) processedByUrl.set(cUrl, scoredRaw);
+      if (fp) processedByFp.set(fp, scoredRaw);
     }
-
-    if (cUrl) seenUrls.add(cUrl);
-    if (fp) seenFp.add(fp);
   }
 
-  // Preserve existing records that were not in incoming raw batch
+  // 4. Preserve existing records that were untouched by incoming batch
   for (const ex of existingRecords) {
-    if (!processedById.has(ex.id)) {
-      processedById.set(ex.id, ex);
-      preservedCount++;
+    if (ex.id && !processedById.has(ex.id)) {
+      const cUrl = canonicalizeUrl(ex.canonical_source_url || ex.source_url || "");
+      const fp = ex.fingerprint || computeFingerprint(ex);
+      if ((!cUrl || !processedByUrl.has(cUrl)) && (!fp || !processedByFp.has(fp))) {
+        processedById.set(ex.id, ex);
+        if (cUrl) processedByUrl.set(cUrl, ex);
+        if (fp) processedByFp.set(fp, ex);
+      }
     }
   }
 
   const processed = Array.from(processedById.values());
-  const activeCount = processed.filter((p) => p.is_active).length;
+  const activeCount = processed.filter((p) => p.is_active !== false).length;
+  const gatedCount = processed.filter((p) => p.is_active === false).length;
+
+  const updatedCount = updatedExistingIds.size;
+  const addedCount = processed.filter((p) => !originalExistingIds.has(p.id)).length;
+  const unchangedCount = Math.max(0, originalExistingIds.size - updatedCount);
+  const preservedCount = updatedCount + unchangedCount;
 
   return {
     merged: processed,
     processed,
     addedCount,
+    insertedCount: addedCount,
     updatedCount,
     preservedCount,
     gatedCount,
     activeCount,
-    unchangedCount: processed.length - addedCount - updatedCount
+    unchangedCount
   };
 }
 

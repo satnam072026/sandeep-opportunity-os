@@ -48,10 +48,16 @@ export interface RepositoryState {
 }
 
 async function cloudflareRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = typeof window !== "undefined" ? window.localStorage.getItem("sandeep_auth_token") : null;
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...((init?.headers as Record<string, string>) || {})
+  };
   const response = await fetch(path, {
     ...init,
     credentials: "include",
-    headers: { "Content-Type": "application/json", ...(init?.headers || {}) }
+    headers
   });
   if (!response.ok) throw new Error(`Cloudflare API request failed (${response.status})`);
   return response.json() as Promise<T>;
@@ -61,10 +67,13 @@ async function authenticateCloudflareWrite(): Promise<boolean> {
   const password = window.prompt("Enter the CRM administrator password to save this change:");
   if (!password) return false;
   try {
-    await cloudflareRequest("/api/auth/login", {
+    const res = await cloudflareRequest<{ ok: boolean; token?: string }>("/api/auth/login", {
       method: "POST",
       body: JSON.stringify({ password })
     });
+    if (res.token && typeof window !== "undefined") {
+      window.localStorage.setItem("sandeep_auth_token", res.token);
+    }
     return true;
   } catch {
     window.alert("The administrator password was not accepted.");

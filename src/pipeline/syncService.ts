@@ -236,7 +236,7 @@ export async function executeSyncPipeline(
     sourcesFailed,
     recordsAdded: syncResult.inserted,
     recordsUpdated: syncResult.updated,
-    recordsUnchanged: Math.max(0, scored.length - syncResult.inserted - syncResult.updated),
+    recordsUnchanged: (syncResult as unknown as { unchanged?: number }).unchanged ?? Math.max(0, existingRows.length - syncResult.updated),
     recordsGated: scored.filter((x) => x.is_active === false).length,
     userFieldsPreserved: syncResult.preservedUserFields,
     totalRecords: syncResult.rows.length,

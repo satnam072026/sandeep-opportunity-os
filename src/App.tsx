@@ -11,15 +11,16 @@ import {
 import { AppShell } from "./components/ui/AppShell";
 import { OpportunityDrawer } from "./components/ui/OpportunityDrawer";
 import { LoadingSkeleton } from "./components/ui/LoadingSkeleton";
-import { TodayPage } from "./features/today/TodayPage";
-import { WorkspacePage } from "./features/workspaces/WorkspacePage";
-import { SavedFollowUpsPage } from "./features/crm/SavedFollowUpsPage";
-import { AiAgentsPage } from "./features/agents/AiAgentsPage";
-import { DataSourcesPage } from "./features/sources/DataSourcesPage";
-import { OperationsPage } from "./features/operations/OperationsPage";
-import { ProfilePage } from "./features/profile/ProfilePage";
 import { AuthProvider, AuthGuard } from "./features/auth/AuthGuard";
-import { ExplorerWorkspace } from "./features/explorer/ExplorerWorkspace";
+
+const TodayPage = React.lazy(() => import("./features/today/TodayPage").then((m) => ({ default: m.TodayPage })));
+const WorkspacePage = React.lazy(() => import("./features/workspaces/WorkspacePage").then((m) => ({ default: m.WorkspacePage })));
+const SavedFollowUpsPage = React.lazy(() => import("./features/crm/SavedFollowUpsPage").then((m) => ({ default: m.SavedFollowUpsPage })));
+const AiAgentsPage = React.lazy(() => import("./features/agents/AiAgentsPage").then((m) => ({ default: m.AiAgentsPage })));
+const DataSourcesPage = React.lazy(() => import("./features/sources/DataSourcesPage").then((m) => ({ default: m.DataSourcesPage })));
+const OperationsPage = React.lazy(() => import("./features/operations/OperationsPage").then((m) => ({ default: m.OperationsPage })));
+const ProfilePage = React.lazy(() => import("./features/profile/ProfilePage").then((m) => ({ default: m.ProfilePage })));
+const ExplorerWorkspace = React.lazy(() => import("./features/explorer/ExplorerWorkspace").then((m) => ({ default: m.ExplorerWorkspace })));
 import {
   type ExplorerSelection,
   type ExplorerAgent,
@@ -312,8 +313,9 @@ const MainContent: React.FC = () => {
       onSelectSheet={handleSelectSheet}
       onSelectTab={handleSelectTab}
     >
-      {/* 1. Drive Explorer Workspace View */}
-      {currentPath === "/explorer" && (
+      <React.Suspense fallback={<LoadingSkeleton />}>
+        {/* 1. Drive Explorer Workspace View */}
+        {currentPath === "/explorer" && (
         <ExplorerWorkspace
           opportunities={opportunities}
           selectedOpportunityId={selectedOpportunity?.id}
@@ -454,6 +456,7 @@ const MainContent: React.FC = () => {
       {currentPath === "/profile" && (
         <ProfilePage profile={profile} onUpdateProfile={handleUpdateProfile} />
       )}
+      </React.Suspense>
 
       {/* Detail Drawer for Inspecting and Mutating Sandeep's 7 CRM Fields */}
       <OpportunityDrawer

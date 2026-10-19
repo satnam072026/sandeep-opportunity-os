@@ -43,8 +43,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user] = useState<AuthUser>(DEFAULT_ADMIN_USER);
   const [token] = useState<string>(DEFAULT_ADMIN_TOKEN);
 
-  const login = useCallback(async () => {
-    return { success: true };
+  const login = useCallback(async (_email: string, pass: string) => {
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: pass })
+      });
+      if (!res.ok) {
+        return { success: false, error: "Invalid credentials" };
+      }
+      const data = (await res.json()) as { token?: string };
+      if (data.token && typeof window !== "undefined") {
+        window.localStorage.setItem("sandeep_auth_token", data.token);
+      }
+      return { success: true };
+    } catch (err: unknown) {
+      return { success: false, error: err instanceof Error ? err.message : "Authentication error" };
+    }
   }, []);
 
   const logout = useCallback(async () => {
