@@ -4,12 +4,11 @@
  * Central source of truth for all Google Drive, Google Sheets, local Muse,
  * Supabase, and Neon infrastructure resources.
  *
- * Connected to the 3 Active Agents + 1 Placeholder:
- * - Bago Muse (bago_muse) -> muse_social_job_hunter, master_job_application_tracker, masters_workbook, job_apply_*
- * - Haya Satnam (haya_satnam) -> satnam_global_jobs, satnam_global_pipeline, satnam_portal_directory, satnam_hpv_prospecting, satnam_businesslending_social, satnam_system_registry
+ * Connected to the 3 Configured Agents:
+ * - Bago Muse (bago_muse) -> muse_social_job_hunter, master_job_application_tracker, job_apply_*
+ * - Haya Satnam (haya_satnam) -> masters_workbook, satnam_global_jobs, satnam_global_pipeline, satnam_portal_directory, satnam_hpv_prospecting, satnam_businesslending_social, satnam_system_registry
  * - Kattu AI (kattu_ai) -> kattu_india_regional, kattu_eu_regional, kattu_uk_regional, kattu_usa_regional, kattu_daily_qa_audit
- * - Haya Arsh (haya_arsh) -> Placeholder (0 sources, setup_required)
- * - System (system) -> neon_canonical_db, supabase_canonical_db
+ * - System (system) -> cloudflare_d1_db
  *
  * SECURITY:
  * Never include API keys, Google service-account private keys, or tokens in this file.
@@ -600,12 +599,12 @@ export const DATA_SOURCE_REGISTRY = [
   // 5. SYSTEM / DATABASE INFRASTRUCTURE
   // ==========================================
   {
-    id: "neon_canonical_db",
-    name: "Neon Lakebase PostgreSQL 18.x (Production)",
+    id: "cloudflare_d1_db",
+    name: "Cloudflare D1 SQL Database (Production)",
     owningAgentId: "system",
     type: "Database",
     url: null,
-    purpose: "Primary system-of-record storing canonical opportunities, workflow states, and agent telemetry",
+    purpose: "Primary canonical database storing opportunities, workflow states, agent health, and research telemetry on Cloudflare edge",
     pipeline: "general",
     syncEnabled: true,
     syncMode: "DATABASE_STORAGE",
@@ -617,27 +616,7 @@ export const DATA_SOURCE_REGISTRY = [
     recordsDuplicated: 0,
     recordsGated: 0,
     canonicalRecords: 2892,
-    notes: "Target enterprise database on AWS Frankfurt with full multi-agent attribution and strict CRM protection."
-  },
-  {
-    id: "supabase_canonical_db",
-    name: "Supabase / PostgreSQL Canonical DB (Rollback Baseline)",
-    owningAgentId: "system",
-    type: "Database",
-    url: null,
-    purpose: "Secondary system-of-record held as active rollback source during Neon migration",
-    pipeline: "general",
-    syncEnabled: true,
-    syncMode: "DATABASE_STORAGE",
-    status: "Connected (DB)",
-    recordCount: 2892,
-    recordsFetched: 2892,
-    recordsParsed: 2892,
-    recordsAccepted: 2892,
-    recordsDuplicated: 0,
-    recordsGated: 0,
-    canonicalRecords: 2892,
-    notes: "Preserved Supabase instance with 2,892 opportunities as rollback safeguard."
+    notes: "Zero-cost high-performance edge SQL database with strict 7-field CRM preservation."
   }
 ];
 
@@ -661,6 +640,9 @@ export function getDataSourcesByCategory(category) {
       );
     case "local":
       return DATA_SOURCE_REGISTRY.filter((ds) => ds.type === "Local File");
+    case "database":
+    case "d1":
+    case "cloudflare":
     case "supabase":
     case "neon":
       return DATA_SOURCE_REGISTRY.filter((ds) => ds.type === "Database");

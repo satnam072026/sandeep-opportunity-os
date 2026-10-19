@@ -44,7 +44,6 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
     if (agent.id === "bago_muse") return o.category === "freelance_leads" || (o.source_url || "").includes("facebook");
     if (agent.id === "kattu_ai") return o.category === "remote_jobs";
     if (agent.id === "haya_satnam") return true;
-    if (agent.id === "haya_arsh") return false; // Strictly neutral placeholder with 0 records
     return true;
   });
 
@@ -115,7 +114,7 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
     }
   ];
 
-  const isSetupRequired = agent.id === "haya_arsh" || agent.status === "idle";
+  const isSetupRequired = agent.status === "idle";
 
   return (
     <div className="os-agent-overview" role="region" aria-label={`${agent.name} Workspace Summary`}>
@@ -172,78 +171,51 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
         </div>
       )}
 
-      {agent.id === "haya_arsh" ? (
-        <div
-          className="os-empty-workspace-state"
-          style={{
-            margin: "24px 0",
-            padding: "48px 24px",
-            borderRadius: "8px",
-            border: "1px dashed var(--border-color)",
-            backgroundColor: "var(--bg-surface)",
-            textAlign: "center"
-          }}
-        >
-          <div style={{ fontSize: "28px", marginBottom: "12px", opacity: 0.6 }}>📁</div>
-          <h2 style={{ fontSize: "16px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "6px" }}>
-            Haya Arsh
-          </h2>
-          <div style={{ fontSize: "14px", color: "var(--text-secondary)", marginBottom: "4px" }}>
-            Workspace not configured yet
-          </div>
-          <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 auto" }}>
-            No data sources connected.
-          </p>
-        </div>
-      ) : (
-        <>
-          {/* 4 Compact Metric Cards */}
-          <CompactMetricCard metrics={metrics} />
+      {/* 4 Compact Metric Cards */}
+      <CompactMetricCard metrics={metrics} />
 
-          {/* Folders in this Agent's Workspace */}
-          {workspace.folders.length > 0 && (
-            <div className="os-folder-section">
-              <h2 className="os-folder-section-title">Drive Folders in {workspace.name}</h2>
-              <div className="os-folder-grid">
-                {workspace.folders.map((folder) => {
-                  const rowsInFolder = folder.sheets.reduce(
-                    (acc, s) => acc + filterOpportunitiesForSheetTab(opportunities, s).length,
-                    0
-                  );
+      {/* Folders in this Agent's Workspace */}
+      {workspace.folders.length > 0 && (
+        <div className="os-folder-section">
+          <h2 className="os-folder-section-title">Drive Folders in {workspace.name}</h2>
+          <div className="os-folder-grid">
+            {workspace.folders.map((folder) => {
+              const rowsInFolder = folder.sheets.reduce(
+                (acc, s) => acc + filterOpportunitiesForSheetTab(opportunities, s).length,
+                0
+              );
 
-                  return (
-                    <div
-                      key={folder.id}
-                      className="os-folder-card"
-                      onClick={() => onOpenFolder(folder)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          onOpenFolder(folder);
-                        }
-                      }}
-                    >
-                      <div className="os-folder-card-header">
-                        <span className="os-folder-card-icon" aria-hidden="true">
-                          📁
-                        </span>
-                        <div>
-                          <div className="os-folder-card-name">{folder.name}</div>
-                          <div className="os-folder-card-meta">
-                            {folder.sheets.length} sheets · {rowsInFolder.toLocaleString()} rows
-                          </div>
-                        </div>
+              return (
+                <div
+                  key={folder.id}
+                  className="os-folder-card"
+                  onClick={() => onOpenFolder(folder)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onOpenFolder(folder);
+                    }
+                  }}
+                >
+                  <div className="os-folder-card-header">
+                    <span className="os-folder-card-icon" aria-hidden="true">
+                      📁
+                    </span>
+                    <div>
+                      <div className="os-folder-card-name">{folder.name}</div>
+                      <div className="os-folder-card-meta">
+                        {folder.sheets.length} sheets · {rowsInFolder.toLocaleString()} rows
                       </div>
-                      <div className="os-folder-card-desc">{folder.description}</div>
                     </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </>
+                  </div>
+                  <div className="os-folder-card-desc">{folder.description}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {/* Direct Sheets in this Agent's Workspace */}

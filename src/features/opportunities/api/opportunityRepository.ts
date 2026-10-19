@@ -43,6 +43,8 @@ export interface RepositoryState {
   uploadedXlsxId: string;
   lastSyncedAt: string;
   syncTelemetry?: SyncTelemetry | null;
+  agentHealth?: Record<string, { health: string; lastSync: string; message: string }> | null;
+  sourceHealth?: SourceSyncDiagnostic[] | null;
 }
 
 async function cloudflareRequest<T>(path: string, init?: RequestInit): Promise<T> {
@@ -289,7 +291,13 @@ export async function fetchOpportunityState(): Promise<RepositoryState> {
 
   // Primary production source: same-origin Cloudflare Worker backed by D1.
   try {
-    const live = await cloudflareRequest<{ opportunities: OpportunityRecord[]; profile?: CandidateProfile }>("/api/state");
+    const live = await cloudflareRequest<{
+      opportunities: OpportunityRecord[];
+      profile?: CandidateProfile;
+      lastSync?: SyncTelemetry | null;
+      agentHealth?: Record<string, { health: string; lastSync: string; message: string }> | null;
+      sourceHealth?: SourceSyncDiagnostic[] | null;
+    }>("/api/state");
     if (Array.isArray(live.opportunities) && live.opportunities.length > 0) {
       const opportunities = live.opportunities.filter(isProductionOpportunity);
       void saveCachedOpportunities(opportunities);
@@ -299,8 +307,10 @@ export async function fetchOpportunityState(): Promise<RepositoryState> {
         profile: live.profile ? { ...profile, ...live.profile } : profile,
         nativeSheetId: NATIVE_SHEET_ID,
         uploadedXlsxId: UPLOADED_XLSX_ID,
-        lastSyncedAt: getLatestVerificationTimestamp(opportunities),
-        syncTelemetry: loadLatestSyncTelemetry()
+        lastSyncedAt: live.lastSync?.completedAt || getLatestVerificationTimestamp(opportunities),
+        syncTelemetry: live.lastSync || loadLatestSyncTelemetry(),
+        agentHealth: live.agentHealth,
+        sourceHealth: live.sourceHealth
       };
     }
   } catch {
@@ -515,22 +525,49 @@ export async function performOpportunitySync(
 }> {
   let telemetry: SyncTelemetry | null = null;
   let activeRecords = currentRecords;
-  let isNeon = false;
 
-  // 1. Primary: Server-side unified sync endpoint (runs Google ingestion -> Neon PostgreSQL)
+  // 1. Primary: Server-side unified sync endpoint (runs Google ingestion -> Cloudflare D1)
   try {
     const res = await fetch("/api/sync", { method: "POST" });
     if (res.ok) {
       const data = await res.json();
-      telemetry = data as SyncTelemetry;
+      telemetry = (data?.telemetry || data) as SyncTelemetry;
 
-      // Re-fetch fresh state from Neon
-      const oppsRes = await fetch("/api/opportunities");
-      if (oppsRes.ok) {
-        const oppsData = await oppsRes.json();
-        if (Array.isArray(oppsData.opportunities) && oppsData.opportunities.length > 0) {
-          activeRecords = oppsData.opportunities as OpportunityRecord[];
-          isNeon = true;
+      // Re-fetch fresh state directly from Cloudflare Worker /api/state
+      const stateRes = await fetch("/api/state");
+      if (stateRes.ok) {
+        const stateData = await stateRes.json();
+        if (Array.isArray(stateData.opportunities) && stateData.opportunities.length > 0) {
+          activeRecords = stateData.opportunities as OpportunityRecord[];
+          const cleanRecords = activeRecords.filter(isProductionOpportunity);
+          const map = loadPersistedCrmMap();
+          for (const r of cleanRecords) {
+            if (r.workflow || r.user_status) {
+              map[r.id] = {
+                user_status: r.user_status,
+                priority: r.priority,
+                workflow: r.workflow,
+                activity_history: r.activity_history
+              };
+            }
+          }
+          savePersistedCrmMap(map);
+          void saveCachedOpportunities(cleanRecords);
+
+          return {
+            state: {
+              mode: "CLOUDFLARE_D1_LIVE",
+              opportunities: cleanRecords,
+              profile: stateData.profile || candidateProfile || (verifiedSeed.candidate_profile as unknown as CandidateProfile),
+              nativeSheetId: NATIVE_SHEET_ID,
+              uploadedXlsxId: UPLOADED_XLSX_ID,
+              lastSyncedAt: telemetry?.completedAt || new Date().toISOString(),
+              syncTelemetry: telemetry,
+              agentHealth: stateData.agentHealth,
+              sourceHealth: stateData.sourceHealth
+            },
+            telemetry
+          };
         }
       }
     }
@@ -573,11 +610,9 @@ export async function performOpportunitySync(
   void saveCachedOpportunities(cleanRecords);
 
   const state: RepositoryState = {
-    mode: isNeon
-      ? "NEON_LIVE"
-      : isSupabaseConfigured && supabaseClient
-        ? "SUPABASE_LIVE"
-        : "SEED_IMPORT_ADAPTER",
+    mode: isSupabaseConfigured && supabaseClient
+      ? "SUPABASE_LIVE"
+      : "SEED_IMPORT_ADAPTER",
     opportunities: cleanRecords,
     profile:
       candidateProfile ||

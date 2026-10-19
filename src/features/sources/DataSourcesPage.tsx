@@ -2,24 +2,57 @@ import React, { useState } from "react";
 import { DATA_SOURCE_REGISTRY, type DataSourceResource } from "../../config/dataSources";
 import { getAgentById } from "../../config/agentRegistry";
 import { Icon } from "../../components/ui/Icon";
+import type { DataSourceMode } from "../opportunities/api/opportunityRepository";
+import type { SourceSyncDiagnostic } from "../../pipeline/syncService";
 
 interface DataSourcesPageProps {
   onSyncNow: () => void;
   isSyncing?: boolean;
   lastSyncedAt?: string;
   recordCount: number;
+  mode?: DataSourceMode;
+  sourceHealth?: SourceSyncDiagnostic[] | null;
 }
 
 export const DataSourcesPage: React.FC<DataSourcesPageProps> = ({
   onSyncNow,
   isSyncing = false,
   lastSyncedAt,
-  recordCount
+  recordCount,
+  mode = "CLOUDFLARE_D1_LIVE",
+  sourceHealth
 }) => {
   const [filterType, setFilterType] = useState<string>("ALL");
 
+  const autoIngestCount = DATA_SOURCE_REGISTRY.filter((s) => s.syncEnabled && s.type !== "Database").length;
+  const driveFoldersCount = DATA_SOURCE_REGISTRY.filter((s) => s.type === "Drive Folder").length;
+
+  const connectedCount = DATA_SOURCE_REGISTRY.filter((src) => {
+    const diag = sourceHealth?.find((s) => s.id === src.id);
+    const st = diag?.status || src.status;
+    return st === "Connected" || st === "Connected (DB)";
+  }).length;
+
+  const blockedCount = DATA_SOURCE_REGISTRY.filter((src) => {
+    const diag = sourceHealth?.find((s) => s.id === src.id);
+    const st = diag?.status || src.status;
+    return st === "Permission required";
+  }).length;
+
   const filteredSources = DATA_SOURCE_REGISTRY.filter((s) => {
     if (filterType === "ALL") return true;
+    if (filterType === "CONNECTED") {
+      const diag = sourceHealth?.find((diag) => diag.id === s.id);
+      const st = diag?.status || s.status;
+      return st === "Connected" || st === "Connected (DB)";
+    }
+    if (filterType === "BLOCKED") {
+      const diag = sourceHealth?.find((diag) => diag.id === s.id);
+      const st = diag?.status || s.status;
+      return st === "Permission required";
+    }
+    if (filterType === "AUTO") return s.syncEnabled && s.type !== "Database";
+    if (filterType === "FOLDERS") return s.type === "Drive Folder";
     if (filterType === "GOOGLE") return s.type === "Native Google Sheet" || s.type === "Drive XLSX" || s.type === "Drive Folder";
     if (filterType === "LOCAL") return s.type === "Local File" || s.type === "Database";
     return true;
@@ -33,8 +66,8 @@ export const DataSourcesPage: React.FC<DataSourcesPageProps> = ({
           <div className="os-page-tagline">INGESTION & SOURCE ARCHITECTURE</div>
           <h1 className="os-page-title">Data Sources & Ingestion Hub</h1>
           <p className="os-page-subtitle">
-            Autonomous multi-source ingestion layer. Google Sheets and Google Drive workbooks updated by Sandeep's 5 AI
-            agents are fetched every 5 hours, parsed server-side, deduplicated, and unified into the Supabase PostgreSQL
+            Autonomous multi-source ingestion layer. Google Sheets and Google Drive workbooks updated by Sandeep&apos;s 3 AI
+            agents across 10 registered Drive folders are fetched server-side, deduplicated, and unified into the Cloudflare D1
             canonical database.
           </p>
         </div>
@@ -51,50 +84,62 @@ export const DataSourcesPage: React.FC<DataSourcesPageProps> = ({
         </div>
       </div>
 
-      {/* Metrics Strip */}
-      <div className="os-metric-strip">
+      {/* 5 Distinct Metrics Cards: 3 Agents, Drive Folders, Auto Ingestion, Connected, Permission Blocked */}
+      <div className="os-metric-strip" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
         <div className="os-metric-card">
-          <div className="os-metric-label">REGISTERED SOURCES</div>
-          <div className="os-metric-val mono">{DATA_SOURCE_REGISTRY.length}</div>
-          <div className="os-metric-delta good">3 Google Cloud + 3 Local Seeds</div>
+          <div className="os-metric-label">CONFIGURED AGENTS</div>
+          <div className="os-metric-val mono">3 Agents</div>
+          <div className="os-metric-delta good">Bago Muse · Haya Satnam · Kattu AI</div>
         </div>
         <div className="os-metric-card">
-          <div className="os-metric-label">CANONICAL DATABASE</div>
-          <div className="os-metric-val mono">Supabase</div>
-          <div className="os-metric-delta info">PostgreSQL · {recordCount} Records</div>
+          <div className="os-metric-label">REGISTERED DRIVE FOLDERS</div>
+          <div className="os-metric-val mono">{driveFoldersCount} Folders</div>
+          <div className="os-metric-delta info">Structured Workspaces & Trackers</div>
         </div>
         <div className="os-metric-card">
-          <div className="os-metric-label">SYNC INTERVAL</div>
-          <div className="os-metric-val mono">5h 00m</div>
-          <div className="os-metric-delta info">00, 05, 10, 15, 20 UTC Schedule</div>
+          <div className="os-metric-label">AUTOMATIC INGESTION</div>
+          <div className="os-metric-val mono">{autoIngestCount} Sources</div>
+          <div className="os-metric-delta info">Scheduled 5-Hour Pipeline</div>
         </div>
         <div className="os-metric-card">
-          <div className="os-metric-label">LAST REFRESH</div>
-          <div className="os-metric-val mono" style={{ fontSize: 13 }}>
-            {lastSyncedAt ? new Date(lastSyncedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Active"}
+          <div className="os-metric-label">CONNECTED SOURCES</div>
+          <div className="os-metric-val mono">{connectedCount} Active</div>
+          <div className="os-metric-delta good">
+            {recordCount > 0 ? `${recordCount.toLocaleString()} records · ${mode}` : `Live Sync · ${mode}`}
+            {lastSyncedAt ? ` · Last synced: ${lastSyncedAt}` : ""}
           </div>
-          <div className="os-metric-delta good">CRM User Edits Protected</div>
+        </div>
+        <div className="os-metric-card">
+          <div className="os-metric-label">PERMISSION-BLOCKED</div>
+          <div className="os-metric-val mono">{blockedCount} Pending</div>
+          <div className="os-metric-delta warning">Awaiting Service Account Reader</div>
         </div>
       </div>
 
       {/* Filter Tabs */}
       <div className="os-filter-bar" style={{ marginTop: 24, marginBottom: 16 }}>
         <div className="os-filter-group">
-          <span className="os-filter-label">Source Type:</span>
-          {["ALL", "GOOGLE", "LOCAL"].map((t) => (
+          <span className="os-filter-label">Filter Sources:</span>
+          {[
+            { id: "ALL", label: "All Sources" },
+            { id: "CONNECTED", label: `Connected (${connectedCount})` },
+            { id: "BLOCKED", label: `Permission Blocked (${blockedCount})` },
+            { id: "AUTO", label: `Auto Ingestion (${autoIngestCount})` },
+            { id: "FOLDERS", label: `Drive Folders (${driveFoldersCount})` }
+          ].map((t) => (
             <button
-              key={t}
+              key={t.id}
               type="button"
-              className={`btn-ghost ${filterType === t ? "active" : ""}`}
+              className={`btn-ghost ${filterType === t.id ? "active" : ""}`}
               style={{
                 padding: "4px 10px",
                 borderRadius: 4,
-                backgroundColor: filterType === t ? "var(--bg-elevated)" : "transparent",
-                color: filterType === t ? "var(--accent-primary)" : "var(--text-secondary)"
+                backgroundColor: filterType === t.id ? "var(--bg-elevated)" : "transparent",
+                color: filterType === t.id ? "var(--accent-primary)" : "var(--text-secondary)"
               }}
-              onClick={() => setFilterType(t)}
+              onClick={() => setFilterType(t.id)}
             >
-              {t === "ALL" ? "All Sources" : t === "GOOGLE" ? "Google Drive / Sheets" : "Local Verified Seeds"}
+              {t.label}
             </button>
           ))}
         </div>
@@ -108,6 +153,7 @@ export const DataSourcesPage: React.FC<DataSourcesPageProps> = ({
               <th style={{ width: 40 }}>#</th>
               <th>Source Name & Resource</th>
               <th>Owning Agent</th>
+              <th>Live Status</th>
               <th>Type & Format</th>
               <th>Target Tabs / Scope</th>
               <th>Cadence</th>
@@ -153,6 +199,20 @@ export const DataSourcesPage: React.FC<DataSourcesPageProps> = ({
                         System
                       </span>
                     )}
+                  </td>
+                  <td>
+                    {(() => {
+                      const diag = sourceHealth?.find((s) => s.id === src.id);
+                      const status = diag?.status || src.status;
+                      const isGood = status === "Connected" || status === "Connected (DB)";
+                      const isWarning = status === "Permission required" || status === "Stale";
+                      const tone = isGood ? "good" : isWarning ? "warning" : "danger";
+                      return (
+                        <span className={`os-badge ${tone} mono`} style={{ fontSize: 10.5 }} title={diag?.message || src.notes}>
+                          {status}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td>
                     <span className="os-badge neutral mono" style={{ fontSize: 11 }}>

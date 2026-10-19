@@ -1478,7 +1478,244 @@ export async function runCanonicalSync({
     }
   }
 
-  // 5. Fetch existing records from Neon or Supabase to preserve CRM state
+  // 5. Ingest GRADUATE SCHEMES - MASTER TRACKER (Bago Muse)
+  const graduateTrackerId = "1zGcyFrXBXQKOrmgJngXGYfIlYm1n1s_AV_DlHJ9tgtQ";
+  let gradCount = 0;
+  if (!googleToken) {
+    sourceDiagnostics.push({
+      id: "graduate_schemes_tracker",
+      name: "GRADUATE SCHEMES - MASTER TRACKER",
+      status: "Permission required",
+      statusCode: 401,
+      message: "Drive Sheet requires Google Service Account authentication.",
+      recordsCount: 0
+    });
+  } else {
+    try {
+      const gradUrl = `https://sheets.googleapis.com/v4/spreadsheets/${graduateTrackerId}?fields=sheets.properties(sheetId,title)`;
+      const res = await fetchFn(gradUrl, {
+        headers: { Authorization: `Bearer ${googleToken}` }
+      });
+      if (res.status === 200) {
+        const meta = await res.json();
+        const tabs = (meta.sheets || []).map((s) => s.properties.title);
+        for (const tabTitle of tabs) {
+          const tabUrl = `https://sheets.googleapis.com/v4/spreadsheets/${graduateTrackerId}/values/'${encodeURIComponent(tabTitle)}'?valueRenderOption=FORMATTED_VALUE`;
+          const valRes = await fetchFn(tabUrl, {
+            headers: { Authorization: `Bearer ${googleToken}` }
+          });
+          if (valRes.status === 200) {
+            const valData = await valRes.json();
+            const values = valData.values || [];
+            if (values.length > 1) {
+              const headers = (values[0] || []).map((h, i) => String(h || "").trim() || `col_${i + 1}`);
+              for (let r = 1; r < values.length; r++) {
+                const row = values[r];
+                if (!row || !row.some((c) => c !== undefined && c !== null && String(c).trim() !== "")) continue;
+                const obj = {};
+                headers.forEach((h, idx) => {
+                  obj[h] = row[idx] !== undefined && row[idx] !== null ? String(row[idx]).trim() : "";
+                });
+                newlyIngestedRaw.push(
+                  normalizeMasterJobTrackerRow(obj, r)
+                );
+                gradCount++;
+              }
+            }
+          }
+        }
+        sourceDiagnostics.push({
+          id: "graduate_schemes_tracker",
+          name: "GRADUATE SCHEMES - MASTER TRACKER",
+          status: "Connected",
+          statusCode: 200,
+          message: `Connected to Sheets API. Ingested ${gradCount} records across tabs [${tabs.join(", ")}].`,
+          recordsCount: gradCount
+        });
+      } else {
+        const errText = await res.text().catch(() => "");
+        sourceDiagnostics.push({
+          id: "graduate_schemes_tracker",
+          name: "GRADUATE SCHEMES - MASTER TRACKER",
+          status: res.status === 403 || res.status === 404 ? "Permission required" : "Failed",
+          statusCode: res.status,
+          message: `Google Sheets API HTTP ${res.status}: ${res.status === 404 ? "Resource not shared with opportunity-os-sync@mcp-fuv-jax.iam.gserviceaccount.com." : errText}`,
+          recordsCount: 0
+        });
+      }
+    } catch (err) {
+      sourceDiagnostics.push({
+        id: "graduate_schemes_tracker",
+        name: "GRADUATE SCHEMES - MASTER TRACKER",
+        status: "Failed",
+        statusCode: 0,
+        message: err.message,
+        recordsCount: 0
+      });
+    }
+  }
+
+  // 6. Ingest Kattu AI Regional Sheets (India, EU, UK, USA)
+  const kattuSources = [
+    {
+      id: "kattu_india_regional",
+      sheetId: "15hOKXuvZDIrytvqRLQNvLQx4w7wTdFS-DSnvT1XIkOw",
+      name: "Projects KattuAI — India Regional Job Research",
+      region: "India"
+    },
+    {
+      id: "kattu_eu_regional",
+      sheetId: "1wi4i3qpDLOzfNXa5_AR6Bvhb4w40xTr4QQmM9qGAzj4",
+      name: "Projects KattuAI — EU Regional Job Research",
+      region: "EU"
+    },
+    {
+      id: "kattu_uk_regional",
+      sheetId: "1ECo6MFxrDXpOQlTyCRGor5XUgE8e4t2zL-LXWJRFN5A",
+      name: "Projects KattuAI — UK Regional Job Research",
+      region: "UK"
+    },
+    {
+      id: "kattu_usa_regional",
+      sheetId: "1tIi0TiQ0L1fNUcqTWTsRVJhV-69g3pbrHGGkhmGGvyo",
+      name: "Projects KattuAI — USA Regional Job Research",
+      region: "USA"
+    }
+  ];
+
+  for (const kSrc of kattuSources) {
+    if (!googleToken) {
+      sourceDiagnostics.push({
+        id: kSrc.id,
+        name: kSrc.name,
+        status: "Permission required",
+        statusCode: 401,
+        message: "Google service account authentication required.",
+        recordsCount: 0
+      });
+      continue;
+    }
+
+    try {
+      const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${kSrc.sheetId}?fields=sheets.properties(sheetId,title)`;
+      const res = await fetchFn(metaUrl, {
+        headers: { Authorization: `Bearer ${googleToken}` }
+      });
+      if (res.status === 200) {
+        const meta = await res.json();
+        const tabs = (meta.sheets || []).map((s) => s.properties.title);
+        let kCount = 0;
+        for (const tabTitle of tabs) {
+          const tabUrl = `https://sheets.googleapis.com/v4/spreadsheets/${kSrc.sheetId}/values/'${encodeURIComponent(tabTitle)}'?valueRenderOption=FORMATTED_VALUE`;
+          const valRes = await fetchFn(tabUrl, {
+            headers: { Authorization: `Bearer ${googleToken}` }
+          });
+          if (valRes.status === 200) {
+            const valData = await valRes.json();
+            const values = valData.values || [];
+            if (values.length > 1) {
+              const headers = (values[0] || []).map((h, i) => String(h || "").trim() || `col_${i + 1}`);
+              for (let r = 1; r < values.length; r++) {
+                const row = values[r];
+                if (!row || !row.some((c) => c !== undefined && c !== null && String(c).trim() !== "")) continue;
+                const obj = {};
+                headers.forEach((h, idx) => {
+                  obj[h] = row[idx] !== undefined && row[idx] !== null ? String(row[idx]).trim() : "";
+                });
+                newlyIngestedRaw.push(
+                  normalizeRegionalResearchRow(obj, r, {
+                    agentId: "kattu_ai",
+                    sourceId: kSrc.id,
+                    sourceName: kSrc.name,
+                    sourceTab: tabTitle
+                  })
+                );
+                kCount++;
+              }
+            }
+          }
+        }
+        sourceDiagnostics.push({
+          id: kSrc.id,
+          name: kSrc.name,
+          status: "Connected",
+          statusCode: 200,
+          message: `Connected to Sheets API. Ingested ${kCount} records across tabs [${tabs.join(", ")}].`,
+          recordsCount: kCount
+        });
+      } else {
+        const errText = await res.text().catch(() => "");
+        sourceDiagnostics.push({
+          id: kSrc.id,
+          name: kSrc.name,
+          status: res.status === 403 || res.status === 404 ? "Permission required" : "Failed",
+          statusCode: res.status,
+          message: `Google Sheets API HTTP ${res.status}: ${res.status === 404 ? "Sheet not shared with opportunity-os-sync@mcp-fuv-jax.iam.gserviceaccount.com." : errText}`,
+          recordsCount: 0
+        });
+      }
+    } catch (err) {
+      sourceDiagnostics.push({
+        id: kSrc.id,
+        name: kSrc.name,
+        status: "Failed",
+        statusCode: 0,
+        message: err.message,
+        recordsCount: 0
+      });
+    }
+  }
+
+  // 7. Ingest Muse_Satnam (Haya Satnam) Root Folder & Sources
+  const satnamRootFolderId = "1sLbCzLwWZzRcihxM5LlyrZokxtmw_Dj-";
+  if (!googleToken) {
+    sourceDiagnostics.push({
+      id: "satnam_global_jobs",
+      name: "Muse_Satnam — Global Jobs & Freelance",
+      status: "Permission required",
+      statusCode: 401,
+      message: "Google service account authentication required.",
+      recordsCount: 0
+    });
+  } else {
+    try {
+      const driveUrl = `https://www.googleapis.com/drive/v3/files/${satnamRootFolderId}?supportsAllDrives=true&fields=id,name,mimeType`;
+      const res = await fetchFn(driveUrl, {
+        headers: { Authorization: `Bearer ${googleToken}` }
+      });
+      if (res.status === 200) {
+        sourceDiagnostics.push({
+          id: "satnam_global_jobs",
+          name: "Muse_Satnam — Global Jobs & Freelance",
+          status: "Connected",
+          statusCode: 200,
+          message: "Connected to Muse_Satnam Drive root folder.",
+          recordsCount: 0
+        });
+      } else {
+        const errText = await res.text().catch(() => "");
+        sourceDiagnostics.push({
+          id: "satnam_global_jobs",
+          name: "Muse_Satnam — Global Jobs & Freelance",
+          status: res.status === 403 || res.status === 404 ? "Permission required" : "Failed",
+          statusCode: res.status,
+          message: `Google Drive API HTTP ${res.status}: ${res.status === 404 ? "Drive folder 1sLbCzLwWZzRcihxM5LlyrZokxtmw_Dj- awaiting Reader access for opportunity-os-sync@mcp-fuv-jax.iam.gserviceaccount.com." : errText}`,
+          recordsCount: 0
+        });
+      }
+    } catch (err) {
+      sourceDiagnostics.push({
+        id: "satnam_global_jobs",
+        name: "Muse_Satnam — Global Jobs & Freelance",
+        status: "Failed",
+        statusCode: 0,
+        message: err.message,
+        recordsCount: 0
+      });
+    }
+  }
+
+  // 8. Fetch existing records from Neon or Supabase to preserve CRM state
   let existingRecords = [...currentRecords];
   let neonSql = null;
   if (neonDatabaseUrl) {

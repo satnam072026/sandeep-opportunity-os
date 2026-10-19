@@ -18,7 +18,7 @@
 
 import type { OpportunityRecord, PipelineCategory } from "../../types/opportunity";
 
-export type ExplorerAgentId = "bago_muse" | "kattu_ai" | "haya_satnam" | "haya_arsh";
+export type ExplorerAgentId = "bago_muse" | "kattu_ai" | "haya_satnam";
 
 export interface ExplorerAgent {
   id: ExplorerAgentId;

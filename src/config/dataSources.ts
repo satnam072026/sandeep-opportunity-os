@@ -86,9 +86,9 @@ export const getDataSourceById: (id: string) => DataSourceResource | undefined =
   getDataSourceByIdJs as unknown as (id: string) => DataSourceResource | undefined;
 
 export const getDataSourcesByCategory: (
-  category: "sheets" | "drive" | "local" | "supabase" | "legacy"
+  category: "sheets" | "drive" | "local" | "supabase" | "legacy" | "database" | "d1" | "cloudflare" | "neon"
 ) => DataSourceResource[] = getDataSourcesByCategoryJs as unknown as (
-  category: "sheets" | "drive" | "local" | "supabase" | "legacy"
+  category: "sheets" | "drive" | "local" | "supabase" | "legacy" | "database" | "d1" | "cloudflare" | "neon"
 ) => DataSourceResource[];
 
 export const getDataSourcesByAgent: (

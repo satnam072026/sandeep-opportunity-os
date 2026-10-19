@@ -664,7 +664,7 @@ describe("Sandeep Opportunity OS — Production Engine & Data Verification Suite
     assert.equal(typeof result.telemetry.totalRecords, "number");
     assert.ok(Array.isArray(result.records));
     assert.ok(Array.isArray(result.telemetry.sourceDiagnostics));
-    assert.equal(result.telemetry.sourceDiagnostics.length, 3);
+    assert.ok(result.telemetry.sourceDiagnostics.length >= 3);
   });
 
   it("25. Parity verification: scheduled runner and canonical engine produce identical IDs and scoring on same inputs", async () => {

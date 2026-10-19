@@ -201,9 +201,9 @@ export const OperationsPage: React.FC<OperationsPageProps> = ({
   return (
     <>
       <PageHeader
-        eyebrow="ENTERPRISE INTELLIGENCE PIPELINE · NEON POSTGRESQL · 4 AI FLEET AGENTS"
+        eyebrow="ENTERPRISE INTELLIGENCE PIPELINE · CLOUDFLARE D1 · 3 AGENTS & 10 DRIVE FOLDERS"
         title="Operations & Ingestion Control Center"
-        subtitle="End-to-End Pipeline: Three configured AI agents (Bago Muse, Haya Satnam, Kattu AI) → Google Drive & Sheets → scheduled ingestion → Opportunity OS"
+        subtitle="End-to-End Pipeline: Three configured AI agents (Bago Muse, Haya Satnam, Kattu AI) across 10 registered Drive folders → Google Drive & Sheets → scheduled ingestion → Cloudflare D1"
         actions={
           <button
             type="button"

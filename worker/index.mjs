@@ -1,4 +1,5 @@
 import verifiedSeed from "../src/data/verified_seed_24.json";
+import { runCanonicalSync } from "../supabase/functions/_shared/canonicalSync.mjs";
 
 const STATUSES = new Set(["New", "Saved", "Preparing", "Contacted", "Applied", "Interviewing", "Follow-Up", "Won", "Rejected", "Archived"]);
 const PRIORITIES = new Set(["High", "Medium", "Low", "P0", "P1", "P2"]);
@@ -65,6 +66,169 @@ async function ensureSeeded(env) {
   await env.DB.batch(statements);
 }
 
+async function executeServerSync(env, triggerType = "MANUAL_UI") {
+  if (!env.GOOGLE_SERVICE_ACCOUNT_EMAIL || !env.GOOGLE_PRIVATE_KEY) {
+    return json({ error: "Google service account credentials not configured in Cloudflare Worker" }, 503);
+  }
+
+  await ensureSeeded(env);
+
+  // 1. Fetch current opportunities and profile from D1
+  const [oppRows] = await Promise.all([
+    env.DB.prepare(`SELECT o.payload AS record, w.payload AS workflow FROM opportunities o LEFT JOIN workflow_states w ON w.opportunity_id = o.id`).all()
+  ]);
+
+  const currentRecords = (oppRows.results || []).map((row) => {
+    const record = JSON.parse(row.record);
+    if (!row.workflow) return record;
+    const wf = JSON.parse(row.workflow);
+    return {
+      ...record,
+      workflow: wf,
+      user_status: wf.status,
+      priority: wf.priority,
+      favorite: wf.favorite,
+      follow_up_date: wf.follow_up_date,
+      contacted_date: wf.contacted_date,
+      applied_date: wf.applied_date,
+      personal_notes: wf.personal_notes
+    };
+  });
+
+  // 2. Run canonical sync engine
+  const syncResult = await runCanonicalSync({
+    googleSaEmail: env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    googlePrivateKey: env.GOOGLE_PRIVATE_KEY,
+    currentRecords,
+    dryRun: true,
+    triggerType
+  });
+
+  const { telemetry, records } = syncResult;
+
+  // 3. Ensure Cloudflare D1 canonical database is recorded in source diagnostics
+  if (!telemetry.sourceDiagnostics.some((s) => s.id === "cloudflare_d1_db")) {
+    telemetry.sourceDiagnostics.push({
+      id: "cloudflare_d1_db",
+      name: "Cloudflare D1 SQL Database (Production)",
+      status: "Connected (DB)",
+      statusCode: 200,
+      message: "Canonical relational database active on Cloudflare Edge with 7-field CRM protection.",
+      recordsCount: records.length
+    });
+  }
+
+  // 4. Compute dynamic agent health strictly for the 3 configured agents (Bago Muse, Haya Satnam, Kattu AI)
+  const bagoDiag = telemetry.sourceDiagnostics.filter((s) =>
+    ["muse_social_job_hunter", "master_job_application_tracker", "graduate_schemes_tracker"].includes(s.id)
+  );
+  const bagoOk = bagoDiag.filter((s) => s.status === "Connected").length;
+  const bagoHealth = bagoOk === bagoDiag.length ? "Healthy" : bagoOk > 0 ? "Degraded" : "Permission required";
+
+  const satnamDiag = telemetry.sourceDiagnostics.filter((s) =>
+    ["masters_workbook", "satnam_global_jobs"].includes(s.id)
+  );
+  const satnamOk = satnamDiag.filter((s) => s.status === "Connected").length;
+  const satnamHealth = satnamOk === satnamDiag.length ? "Healthy" : satnamOk > 0 ? "Degraded" : "Permission required";
+
+  const kattuDiag = telemetry.sourceDiagnostics.filter((s) => s.id.startsWith("kattu_"));
+  const kattuOk = kattuDiag.filter((s) => s.status === "Connected").length;
+  const kattuHealth = kattuOk === kattuDiag.length ? "Healthy" : kattuOk > 0 ? "Degraded" : "Permission required";
+
+  const agentHealth = {
+    bago_muse: {
+      health: bagoHealth,
+      lastSync: telemetry.completedAt,
+      message: `${bagoOk}/${bagoDiag.length} sources connected (Bago Social Sheet + Drive Workbooks)`
+    },
+    haya_satnam: {
+      health: satnamHealth,
+      lastSync: telemetry.completedAt,
+      message: satnamOk > 0
+        ? `${satnamOk}/${satnamDiag.length} sources connected (Master's workbook active; Muse_Satnam root pending)`
+        : "Awaiting Google Service Account reader access on Muse_Satnam workspace"
+    },
+    kattu_ai: {
+      health: kattuHealth,
+      lastSync: telemetry.completedAt,
+      message: kattuOk > 0
+        ? `${kattuOk}/${kattuDiag.length} regional sheets connected`
+        : "Awaiting Google Service Account reader access on Kattu Regional Sheets (India, EU, UK, USA)"
+    }
+  };
+
+  telemetry.agentHealth = agentHealth;
+
+  // 5. Batch upsert into D1 opportunities & workflow_states
+  const oppStatements = [];
+  const wfStatements = [];
+
+  for (const opp of records) {
+    oppStatements.push(
+      env.DB.prepare(
+        `INSERT INTO opportunities (id, category, score_total, last_verified_at, payload)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           category = excluded.category,
+           score_total = excluded.score_total,
+           last_verified_at = excluded.last_verified_at,
+           payload = excluded.payload,
+           updated_at = CURRENT_TIMESTAMP`
+      ).bind(
+        opp.id,
+        opp.category,
+        Number(opp.score_total || 0),
+        opp.last_verified_at || new Date().toISOString(),
+        JSON.stringify(opp)
+      )
+    );
+
+    if (opp.workflow || opp.user_status) {
+      const wf = opp.workflow || {
+        status: opp.user_status || "New",
+        priority: opp.priority || "P2",
+        favorite: Boolean(opp.favorite),
+        follow_up_date: opp.follow_up_date || null,
+        personal_notes: opp.personal_notes || "",
+        contacted_date: opp.contacted_date || null,
+        applied_date: opp.applied_date || null
+      };
+      wfStatements.push(
+        env.DB.prepare(
+          `INSERT INTO workflow_states (opportunity_id, payload)
+           VALUES (?, ?)
+           ON CONFLICT(opportunity_id) DO UPDATE SET
+             payload = excluded.payload,
+             updated_at = CURRENT_TIMESTAMP`
+        ).bind(opp.id, JSON.stringify(wf))
+      );
+    }
+  }
+
+  const allStatements = [...oppStatements, ...wfStatements];
+  const BATCH_SIZE = 50;
+  for (let i = 0; i < allStatements.length; i += BATCH_SIZE) {
+    await env.DB.batch(allStatements.slice(i, i + BATCH_SIZE));
+  }
+
+  // 6. Record run in research_runs table
+  await env.DB.prepare(
+    `INSERT INTO research_runs (worker_id, summary, started_at, completed_at)
+     VALUES ('cloudflare-worker', ?, ?, ?)`
+  ).bind(
+    JSON.stringify(telemetry),
+    telemetry.startedAt,
+    telemetry.completedAt
+  ).run();
+
+  return json({
+    ok: true,
+    telemetry,
+    recordsCount: records.length,
+    records
+  });
+}
+
 async function handleApi(request, env, url) {
   if (!env.APP_SESSION_SECRET || env.APP_SESSION_SECRET.length < 32 || !env.APP_ADMIN_PASSWORD || env.APP_ADMIN_PASSWORD.length < 12) {
     return json({ error: "Server secrets are not configured" }, 503);
@@ -81,6 +245,10 @@ async function handleApi(request, env, url) {
     return json({ ok: true, database: "cloudflare-d1" });
   }
 
+  if (url.pathname === "/api/sync" && request.method === "POST") {
+    return await executeServerSync(env, "MANUAL_UI");
+  }
+
   if (url.pathname === "/api/auth/login" && request.method === "POST") {
     const body = await readBody(request);
     if (!await secureEqual(body?.password || "", env.APP_ADMIN_PASSWORD)) return json({ error: "Invalid credentials" }, 401);
@@ -93,10 +261,12 @@ async function handleApi(request, env, url) {
 
   if (url.pathname === "/api/state" && request.method === "GET") {
     await ensureSeeded(env);
-    const [opportunities, profile] = await Promise.all([
+    const [opportunities, profile, latestRun] = await Promise.all([
       env.DB.prepare(`SELECT o.payload AS record, w.payload AS workflow FROM opportunities o LEFT JOIN workflow_states w ON w.opportunity_id = o.id ORDER BY o.score_total DESC, o.id ASC`).all(),
-      env.DB.prepare("SELECT payload FROM profiles WHERE id = 'sandeep'").first()
+      env.DB.prepare("SELECT payload FROM profiles WHERE id = 'sandeep'").first(),
+      env.DB.prepare("SELECT summary, started_at, completed_at FROM research_runs ORDER BY id DESC LIMIT 1").first()
     ]);
+    const runSummary = latestRun?.summary ? JSON.parse(latestRun.summary) : null;
     return json({
       opportunities: opportunities.results.map((row) => {
         const record = JSON.parse(row.record);
@@ -104,7 +274,10 @@ async function handleApi(request, env, url) {
         const workflow = JSON.parse(row.workflow);
         return { ...record, workflow, user_status: workflow.status, priority: workflow.priority, favorite: workflow.favorite, follow_up_date: workflow.follow_up_date, contacted_date: workflow.contacted_date, applied_date: workflow.applied_date, personal_notes: workflow.personal_notes };
       }),
-      profile: profile?.payload ? JSON.parse(profile.payload) : null
+      profile: profile?.payload ? JSON.parse(profile.payload) : null,
+      lastSync: runSummary,
+      agentHealth: runSummary?.agentHealth || null,
+      sourceHealth: runSummary?.sourceDiagnostics || null
     });
   }
 
@@ -171,6 +344,9 @@ export default {
       console.error("Request failed", error instanceof Error ? error.message : "Unknown error");
       return json({ error: "Internal server error" }, 500);
     }
+  },
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(executeServerSync(env, "SCHEDULED_CRON"));
   }
 };
 

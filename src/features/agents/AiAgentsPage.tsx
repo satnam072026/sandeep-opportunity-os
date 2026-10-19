@@ -13,6 +13,7 @@ interface AiAgentsPageProps {
   onNavigate: (path: AppRoutePath, params?: Record<string, string>) => void;
   onSyncNow: () => void;
   isSyncing?: boolean;
+  agentHealth?: Record<string, { health: string; lastSync: string; message: string }> | null;
 }
 
 export const AiAgentsPage: React.FC<AiAgentsPageProps> = ({
@@ -20,7 +21,8 @@ export const AiAgentsPage: React.FC<AiAgentsPageProps> = ({
   onSelectOpportunity,
   onNavigate,
   onSyncNow,
-  isSyncing = false
+  isSyncing = false,
+  agentHealth
 }) => {
   const [selectedAgentId, setSelectedAgentId] = useState<AgentId | "ALL">("ALL");
 
@@ -194,10 +196,20 @@ export const AiAgentsPage: React.FC<AiAgentsPageProps> = ({
                   </div>
                 </div>
 
-                <span className="os-badge good mono" style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "var(--status-success-fg)" }} />
-                  {agent.health}
-                </span>
+                {(() => {
+                  const liveInfo = agentHealth?.[agent.id];
+                  const healthLabel = liveInfo?.health || agent.health;
+                  const isGood = healthLabel === "Healthy" || healthLabel === "Active" || healthLabel === "online";
+                  const isWarning = healthLabel === "Permission required" || healthLabel === "Degraded" || healthLabel === "Setup required";
+                  const badgeTone = isGood ? "good" : isWarning ? "warning" : "danger";
+                  const dotColor = isGood ? "var(--status-success-fg)" : isWarning ? "var(--status-warning-fg)" : "var(--status-danger-fg)";
+                  return (
+                    <span className={`os-badge ${badgeTone} mono`} style={{ display: "flex", alignItems: "center", gap: 5 }} title={liveInfo?.message}>
+                      <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: dotColor }} />
+                      {healthLabel}
+                    </span>
+                  );
+                })()}
               </div>
 
               {/* Description */}

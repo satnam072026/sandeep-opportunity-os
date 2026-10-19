@@ -39,7 +39,7 @@ interface AppShellProps {
 }
 
 const ROUTE_TITLES: Record<AppRoutePath, { title: string; context: string }> = {
-  "/today": { title: "Home", context: "Priority actions and intelligence changes" },
+  "/today": { title: "Today Command Center", context: "Priority actions and intelligence changes" },
   "/explorer": { title: "Drive Explorer & Spreadsheets", context: "Google Drive, Sheets, Workspaces & Agent Files" },
   "/opportunities": { title: "All Opportunities Directory", context: "Unified Multi-Agent Enterprise Research Directory" },
   "/agents": { title: "Research Agents", context: "3 autonomous agents operating for Sandeep" },

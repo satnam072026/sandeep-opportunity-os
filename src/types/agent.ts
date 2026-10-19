@@ -15,7 +15,6 @@ export type AgentId =
   | "bago_muse"
   | "haya_satnam"
   | "kattu_ai"
-  | "haya_arsh"
   | "system"
   | "sandy_muse"
   | "haya_muse_1"

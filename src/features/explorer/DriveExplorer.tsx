@@ -30,7 +30,6 @@ export const DriveExplorer: React.FC<DriveExplorerProps> = ({
     f_global_jobs: true,
     ws_kattu: true,
     f_regional_fleet: true,
-    ws_haya_arsh: false,
     ws_job_apply: false
   });
 

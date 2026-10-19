@@ -34,7 +34,17 @@ const MainContent: React.FC = () => {
   const { currentPath, searchParams, navigate } = useAppRouter();
   const [repoState, setRepoState] = useState<RepositoryState | null>(null);
   const [selectedOpportunity, setSelectedOpportunity] = useState<OpportunityRecord | null>(null);
-  const [theme, setTheme] = useState<"dark" | "light">("light");
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = window.localStorage.getItem("sandeep_theme");
+        if (saved === "light" || saved === "dark") return saved;
+      } catch {
+        // ignore
+      }
+    }
+    return "dark";
+  });
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
   // Initialize Explorer selection from search params or defaults
@@ -101,6 +111,11 @@ const MainContent: React.FC = () => {
       const next = prev === "dark" ? "light" : "dark";
       if (typeof document !== "undefined") {
         document.documentElement.setAttribute("data-theme", next);
+      }
+      try {
+        window.localStorage.setItem("sandeep_theme", next);
+      } catch {
+        // ignore
       }
       return next;
     });
@@ -330,6 +345,7 @@ const MainContent: React.FC = () => {
           lastSyncedAt={lastSyncedAt}
           onSyncNow={handleTriggerSync}
           isSyncing={isSyncing}
+          agentHealth={repoState?.agentHealth}
         />
       )}
 
@@ -353,6 +369,7 @@ const MainContent: React.FC = () => {
           onNavigate={navigate}
           onSyncNow={handleTriggerSync}
           isSyncing={isSyncing}
+          agentHealth={repoState?.agentHealth}
         />
       )}
 
@@ -363,6 +380,8 @@ const MainContent: React.FC = () => {
           isSyncing={isSyncing}
           lastSyncedAt={lastSyncedAt}
           recordCount={opportunities.length}
+          mode={mode}
+          sourceHealth={repoState?.sourceHealth}
         />
       )}
 

@@ -15,3 +15,5 @@ blob-report/
 .secrets/
 supabase/.temp/
 .neon
+worker-configuration.d.ts
+.gstack/
