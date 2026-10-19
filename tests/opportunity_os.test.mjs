@@ -1300,19 +1300,15 @@ describe("Sandeep Opportunity OS — Production Engine & Data Verification Suite
     assert.equal(healthJson.database, "cloudflare-d1");
     assert.equal(healthJson.opportunities, undefined, "GET /api/health must NEVER include CRM records");
 
-    // 6. Authorized GET /api/state with Bearer password -> Must be HTTP 200
-    const authBearerRes = await worker.fetch(
+    // 6. Raw passwords must never work as bearer credentials.
+    const rawPasswordRes = await worker.fetch(
       new Request("https://sandeep-opportunity-os.sandeep-os.workers.dev/api/state", {
         method: "GET",
         headers: { Authorization: "Bearer SandeepSecurePassword2026!" }
       }),
       mockEnv
     );
-    assert.equal(authBearerRes.status, 200, "Bearer password authenticated GET /api/state must return 200");
-    const authBearerJson = await authBearerRes.json();
-    assert.ok(Array.isArray(authBearerJson.opportunities), "Authenticated caller receives opportunities array");
-    assert.equal(authBearerJson.opportunities.length, 1);
-    assert.equal(authBearerJson.opportunities[0].id, "opp_confidential_01");
+    assert.equal(rawPasswordRes.status, 401, "Raw admin passwords must not authenticate API requests");
 
     // 7. Authorized GET /api/state with x-admin-key -> Must be HTTP 200
     const authKeyRes = await worker.fetch(
@@ -1324,14 +1320,36 @@ describe("Sandeep Opportunity OS — Production Engine & Data Verification Suite
     );
     assert.equal(authKeyRes.status, 200, "x-admin-key authenticated GET /api/state must return 200");
 
-    // 8. Authorized GET /api/state with Cloudflare Access JWT header -> Must be HTTP 200
-    const authCfRes = await worker.fetch(
+    // 8. Unverified Cloudflare Access headers are attacker-controlled and must be rejected.
+    const forgedCfRes = await worker.fetch(
       new Request("https://sandeep-opportunity-os.sandeep-os.workers.dev/api/state", {
         method: "GET",
         headers: { "cf-access-jwt-assertion": "eyJhbGciOiJSUzI1NiIsImtpZCI6IjEyMzQ1In0.eyJhdWQiOlsiYWJjIl19.sig" }
       }),
       mockEnv
     );
-    assert.equal(authCfRes.status, 200, "Cloudflare Access assertion GET /api/state must return 200");
+    assert.equal(forgedCfRes.status, 401, "Unsigned Cloudflare Access assertions must be rejected");
+
+    // 9. Password login issues an HttpOnly cookie that authorizes the session.
+    const loginRes = await worker.fetch(
+      new Request("https://sandeep-opportunity-os.sandeep-os.workers.dev/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: "SandeepSecurePassword2026!" })
+      }),
+      mockEnv
+    );
+    assert.equal(loginRes.status, 200);
+    const sessionCookie = loginRes.headers.get("set-cookie");
+    assert.match(sessionCookie, /^__Host-sandeep_session=/u);
+    assert.match(sessionCookie, /HttpOnly/u);
+    assert.match(sessionCookie, /SameSite=Strict/u);
+    const cookieStateRes = await worker.fetch(
+      new Request("https://sandeep-opportunity-os.sandeep-os.workers.dev/api/state", {
+        headers: { Cookie: sessionCookie.split(";")[0] }
+      }),
+      mockEnv
+    );
+    assert.equal(cookieStateRes.status, 200, "A Worker-signed session cookie must authorize CRM access");
   });
 });

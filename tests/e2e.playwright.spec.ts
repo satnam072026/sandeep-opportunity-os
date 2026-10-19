@@ -16,17 +16,20 @@ test.describe("Sandeep Opportunity OS — enterprise frontend flows", () => {
     if (testInfo.title.includes("unauthenticated")) {
       return;
     }
-    await page.addInitScript(() => {
-      window.localStorage.setItem("sandeep_neon_auth_token", "sess_e2e_valid_token");
-      window.localStorage.setItem(
-        "sandeep_neon_auth_user",
-        JSON.stringify({
+    await page.route("**/api/auth/session", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          user: {
           id: "usr_sandeep_e2e",
           name: "Sandeep Gautam",
           email: "sandeep.gautam@opportunity-os.local",
           role: "admin"
+          }
         })
-      );
+      });
     });
   });
 
@@ -189,19 +192,12 @@ test.describe("Sandeep Opportunity OS — enterprise frontend flows", () => {
     await expect(sidebarSync).toHaveCount(0);
   });
 
-  test("Open Access: loads Today Command Center immediately without password or login barrier", async ({ page, context }) => {
-    // Clear storage to simulate brand new user
+  test("unauthenticated visitors see the secure login instead of private CRM data", async ({ page, context }) => {
     await context.clearCookies();
     await page.goto("/today");
-    await page.evaluate(() => {
-      window.localStorage.removeItem("sandeep_neon_auth_token");
-      window.localStorage.removeItem("sandeep_neon_auth_user");
-    });
-    await page.reload();
-
-    // Verify app opens directly without any password prompt or login screen
-    await expect(page.locator(".os-breadcrumb-current")).toHaveText("Today Command Center", { timeout: 30000 });
-    await expect(page.locator("h1:has-text('Enterprise Control Center')")).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Private intelligence workspace" })).toBeVisible();
+    await expect(page.getByLabel("Administrator password")).toBeVisible();
+    await expect(page.locator(".os-shell")).toHaveCount(0);
   });
 });
 

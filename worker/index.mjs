@@ -39,15 +39,11 @@ async function secureEqual(left, right) {
 }
 
 async function requireAdmin(request, env) {
-  // 1. Cloudflare Access JWT assertion or authenticated email
-  const cfJwt = request.headers.get("cf-access-jwt-assertion");
-  if (cfJwt && cfJwt.length > 20) return true;
-  const cfEmail = request.headers.get("cf-access-authenticated-user-email");
-  if (cfEmail && cfEmail.includes("@")) return true;
-
-  // 2. Cookie session (__Host-sandeep_session or sandeep_session)
+  // Trust only credentials that this Worker can verify cryptographically.
+  // Cloudflare Access headers require full JWT signature/issuer/audience
+  // verification and therefore are deliberately not accepted here.
   const cookies = parseCookies(request.headers.get("cookie"));
-  const cookieToken = cookies["__Host-sandeep_session"] || cookies["sandeep_session"];
+  const cookieToken = cookies["__Host-sandeep_session"];
   if (cookieToken && env.APP_SESSION_SECRET) {
     const [expiresAt, signature] = cookieToken.split(".");
     if (expiresAt && signature && Number(expiresAt) >= Date.now()) {
@@ -70,14 +66,12 @@ async function requireAdmin(request, env) {
       }
     }
     if (env.ADMIN_API_KEY && await secureEqual(bearerToken, env.ADMIN_API_KEY)) return true;
-    if (env.APP_ADMIN_PASSWORD && await secureEqual(bearerToken, env.APP_ADMIN_PASSWORD)) return true;
   }
 
   // 4. Custom header: x-admin-key
   const adminKey = request.headers.get("x-admin-key") || "";
   if (adminKey) {
     if (env.ADMIN_API_KEY && await secureEqual(adminKey, env.ADMIN_API_KEY)) return true;
-    if (env.APP_ADMIN_PASSWORD && await secureEqual(adminKey, env.APP_ADMIN_PASSWORD)) return true;
   }
 
   return false;
@@ -297,7 +291,6 @@ async function handleApi(request, env, url) {
     const token = `${expiresAt}.${signature}`;
     return json({
       ok: true,
-      token,
       user: {
         id: "usr_sandeep_admin",
         name: "Sandeep Gautam",
@@ -305,7 +298,18 @@ async function handleApi(request, env, url) {
         role: "admin"
       }
     }, 200, {
-      "set-cookie": `__Host-sandeep_session=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=28800`
+      "set-cookie": `__Host-sandeep_session=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=28800`
+    });
+  }
+
+  if (url.pathname === "/api/auth/session" && request.method === "GET") {
+    if (!await requireAdmin(request, env)) return json({ error: "Authentication required" }, 401);
+    return json({ ok: true, user: { id: "usr_sandeep_admin", name: "Sandeep Gautam", email: "bagosandeep@gmail.com", role: "admin" } });
+  }
+
+  if (url.pathname === "/api/auth/logout" && request.method === "POST") {
+    return json({ ok: true }, 200, {
+      "set-cookie": "__Host-sandeep_session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0"
     });
   }
 

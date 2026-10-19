@@ -1,96 +1,89 @@
-import React, { createContext, useContext, useState, useCallback } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 
-export interface AuthUser {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-}
-
+export interface AuthUser { id: string; name: string; email: string; role: string; }
 interface AuthContextValue {
-  user: AuthUser;
-  token: string;
+  user: AuthUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, pass: string) => Promise<{ success: boolean; error?: string }>;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
 }
 
-const DEFAULT_ADMIN_USER: AuthUser = {
-  id: "usr_sandeep_admin",
-  name: "Sandeep Gautam",
-  email: "bagosandeep@gmail.com",
-  role: "admin"
-};
-
-const DEFAULT_ADMIN_TOKEN = "sess_sandeep_open_access_2026";
-
 const AuthContext = createContext<AuthContextValue>({
-  user: DEFAULT_ADMIN_USER,
-  token: DEFAULT_ADMIN_TOKEN,
-  isAuthenticated: true,
-  isLoading: false,
-  login: async () => ({ success: true }),
-  logout: async () => {}
+  user: null, isAuthenticated: false, isLoading: true,
+  login: async () => ({ success: false }), logout: async () => {}
 });
 
-/**
- * Open Access AuthProvider:
- * Bypasses password/login screens completely as requested by Sandeep.
- * Direct access to the full Opportunity OS dashboard with administrator privileges.
- */
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user] = useState<AuthUser>(DEFAULT_ADMIN_USER);
-  const [token] = useState<string>(DEFAULT_ADMIN_TOKEN);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const login = useCallback(async (_email: string, pass: string) => {
+  useEffect(() => {
+    let active = true;
+    fetch("/api/auth/session", { credentials: "include" })
+      .then(async (response) => response.ok ? response.json() as Promise<{ user: AuthUser }> : null)
+      .then((data) => { if (active) setUser(data?.user ?? null); })
+      .catch(() => { if (active) setUser(null); })
+      .finally(() => { if (active) setIsLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  const login = useCallback(async (_email: string, password: string) => {
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: pass })
+      const response = await fetch("/api/auth/login", {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password })
       });
-      if (!res.ok) {
-        return { success: false, error: "Invalid credentials" };
-      }
-      const data = (await res.json()) as { token?: string };
-      if (data.token && typeof window !== "undefined") {
-        window.localStorage.setItem("sandeep_auth_token", data.token);
-      }
+      if (!response.ok) return { success: false, error: "Invalid password" };
+      const data = (await response.json()) as { user: AuthUser };
+      setUser(data.user);
       return { success: true };
-    } catch (err: unknown) {
-      return { success: false, error: err instanceof Error ? err.message : "Authentication error" };
+    } catch {
+      return { success: false, error: "Unable to reach the secure login service" };
     }
   }, []);
 
   const logout = useCallback(async () => {
-    // Open access mode: keep session active
+    await fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => undefined);
+    setUser(null);
   }, []);
 
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        token,
-        isAuthenticated: true,
-        isLoading: false,
-        login,
-        logout
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={{ user, isAuthenticated: Boolean(user), isLoading, login, logout }}>{children}</AuthContext.Provider>;
 };
 
-export const useAuth = (): AuthContextValue => {
-  return useContext(AuthContext);
-};
+export const useAuth = (): AuthContextValue => useContext(AuthContext);
 
-/**
- * Open Access AuthGuard:
- * Renders application children directly without requiring any login screen or password prompt.
- */
 export const AuthGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  return <>{children}</>;
+  const { isAuthenticated, isLoading, login } = useAuth();
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  if (isLoading) return <div className="auth-loading">Securing your workspace…</div>;
+  if (isAuthenticated) return <>{children}</>;
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault(); setSubmitting(true); setError("");
+    const result = await login("", password);
+    if (!result.success) setError(result.error || "Sign-in failed");
+    setSubmitting(false);
+  };
+
+  return (
+    <main className="auth-shell">
+      <section className="auth-card" aria-labelledby="auth-title">
+        <div className="auth-mark" aria-hidden="true">OS</div>
+        <p className="auth-eyebrow">SANDEEP OPPORTUNITY OS</p>
+        <h1 id="auth-title">Private intelligence workspace</h1>
+        <p className="auth-copy">Sign in to access your opportunities, agent activity, and CRM records.</p>
+        <form onSubmit={submit} className="auth-form">
+          <label htmlFor="admin-password">Administrator password</label>
+          <input id="admin-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required autoFocus />
+          {error ? <p className="auth-error" role="alert">{error}</p> : null}
+          <button type="submit" disabled={submitting}>{submitting ? "Signing in…" : "Enter workspace"}</button>
+        </form>
+        <p className="auth-security">Protected with an encrypted, HTTP-only session.</p>
+      </section>
+    </main>
+  );
 };
