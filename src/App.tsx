@@ -34,7 +34,7 @@ const MainContent: React.FC = () => {
   const { currentPath, searchParams, navigate } = useAppRouter();
   const [repoState, setRepoState] = useState<RepositoryState | null>(null);
   const [selectedOpportunity, setSelectedOpportunity] = useState<OpportunityRecord | null>(null);
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [theme, setTheme] = useState<"dark" | "light">("light");
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
   // Initialize Explorer selection from search params or defaults

@@ -39,10 +39,10 @@ interface AppShellProps {
 }
 
 const ROUTE_TITLES: Record<AppRoutePath, { title: string; context: string }> = {
-  "/today": { title: "Today Command Center", context: "Ranked Priority Action Queue & Scheduled Follow-ups" },
+  "/today": { title: "Home", context: "Priority actions and intelligence changes" },
   "/explorer": { title: "Drive Explorer & Spreadsheets", context: "Google Drive, Sheets, Workspaces & Agent Files" },
   "/opportunities": { title: "All Opportunities Directory", context: "Unified Multi-Agent Enterprise Research Directory" },
-  "/agents": { title: "AI Research Agent Fleet", context: "5 Autonomous Intelligence Agents Operating for Sandeep" },
+  "/agents": { title: "Research Agents", context: "3 autonomous agents operating for Sandeep" },
   "/sources": { title: "Data Sources & Ingestion Hub", context: "Google Sheets, Drive XLSX, Fallback Repositories & Ingestion Telemetry" },
   "/freelance": { title: "Freelance Client Leads", context: "Bago Muse · Cyprus & UK SME Targets with Actionable Commercial Hooks" },
   "/jobs": { title: "Visa & Cyprus Jobs", context: "Haya Satnam · Nicosia, Limassol & EU Visa-Sponsoring Strategic Roles" },
